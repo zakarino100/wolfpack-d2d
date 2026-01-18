@@ -68,3 +68,10 @@ task = "shell.exec"
 args = "npm run expo:dev"
 waitForPort = 8081
 ensurePreviewReachable = "/status"
+
+[userenv]
+
+[userenv.shared]
+EXPO_PUBLIC_SUPABASE_URL = "${SUPABASE_URL}"
+EXPO_PUBLIC_SUPABASE_ANON_KEY = "${SUPABASE_ANON_KEY}"
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY = "${GOOGLE_MAPS_API_KEY}"
