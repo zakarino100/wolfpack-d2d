@@ -1,0 +1,293 @@
+You are an expert full-stack engineer. Build a mobile-first Door-to-Door (D2D) canvassing app for Wolfpack Wash that runs in Replit and uses our EXISTING Supabase project (same database as Wolfpack Wash CRM). The D2D app MUST write data into the same tables (or compatible new tables) so that NEW D2D activity appears in the CRM “Activity” feed.
+
+IMPORTANT: We are building for LONGEVITY and data integrity. Implement all features below EXCEPT route scheduling.
+
+TECH STACK
+- Next.js 14 (App Router) + TypeScript
+- TailwindCSS + shadcn/ui
+- Supabase JS client
+- Auth: Google OAuth via NextAuth/Auth.js
+- Map: Google Maps JavaScript API (preferred)
+- Reverse geocoding: Google Maps Geocoder
+- Offline-first: localStorage queue for unsent touches/leads
+- No service role keys in browser; writes via server route handlers with SUPABASE_SERVICE_ROLE_KEY.
+
+AUTH + ROLES
+- Google OAuth login required
+- Allowlist users by email in ADMIN_EMAILS for “admin”
+- Also support “rep” users by allowlist REPS_EMAILS (comma separated) OR by database profiles.role='rep'.
+- Admins can see all businesses/leads/touches. Reps only see their own assigned leads/touches unless admin grants access.
+- Assume single business unit for now: 'wolfpack_wash'
+
+CORE UX GOAL (FIELD READY)
+Main canvassing flow:
+1) Rep opens /canvass (map)
+2) Rep searches address OR taps map to drop pin
+3) App reverse geocodes and fills address fields (editable)
+4) App checks for existing lead at that address (dedup)
+5) Rep logs a “touch” (knock outcome) and optionally captures homeowner contact + quote details
+6) Save creates/updates the Lead record AND creates a Touch record AND writes a CRM activity entry
+
+DO NOT build route scheduling. Reps simply promise “next week / within 2 weeks” and set follow-ups.
+
+DATA MODEL (LONGEVITY FIRST)
+We need separate persistent Lead records from Touch/Visit history. Create new tables only if compatible CRM tables do not exist.
+
+A) leads (or d2d_leads if no existing leads table)
+- id uuid pk default gen_random_uuid()
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+- source text default 'd2d'
+- business_unit text default 'wolfpack_wash'
+- homeowner_name text null
+- phone text null
+- email text null
+- address_line1 text not null
+- city text null
+- state text null
+- zip text null
+- latitude numeric null
+- longitude numeric null
+- services_interested text[] null
+- tags text[] null
+- status text not null default 'new'  -- overall lead status (not each touch)
+- assigned_rep_email text null
+- last_touch_at timestamptz null
+- next_followup_at timestamptz null
+- followup_channel text null -- 'call'|'text'|'knock'
+- followup_priority text null -- 'low'|'med'|'high'
+- do_not_knock boolean default false
+
+B) d2d_touches (NEW TABLE REQUIRED)
+Each time you knock/call/text you create a touch (never overwrite history).
+- id uuid pk default gen_random_uuid()
+- created_at timestamptz default now()
+- lead_id uuid not null references leads(id) on delete cascade
+- rep_email text not null
+- touch_type text not null -- 'knock'|'call'|'text'|'note'
+- outcome text not null -- 'no_answer'|'contacted'|'interested'|'quoted'|'booked'|'not_interested'|'do_not_knock'
+- notes text null
+- next_followup_at timestamptz null
+- followup_channel text null
+- followup_priority text null
+
+C) d2d_quotes (NEW TABLE REQUIRED)
+Store offer snapshots so pricing changes don’t break historical truth.
+- id uuid pk default gen_random_uuid()
+- created_at timestamptz default now()
+- lead_id uuid not null references leads(id) on delete cascade
+- rep_email text not null
+- offer_version text null -- e.g. 'Driveway99-Jan2026'
+- quote_amount numeric null
+- quote_line_items jsonb not null  -- [{service:'Driveway', price:99, sqft:null, notes:''}, ...]
+- estimated_duration_minutes int null
+- proposed_timeframe text null -- e.g. 'within 2 weeks'
+- notes text null
+
+D) d2d_media (NEW TABLE REQUIRED)
+Photo/video capture at the door for proof + marketing.
+- id uuid pk default gen_random_uuid()
+- created_at timestamptz default now()
+- lead_id uuid not null references leads(id) on delete cascade
+- touch_id uuid null references d2d_touches(id) on delete set null
+- rep_email text not null
+- type text not null -- 'image'|'video'
+- storage_bucket text not null
+- storage_path text not null
+- mime_type text null
+- original_filename text null
+- size_bytes bigint null
+- captured_at timestamptz default now()
+
+E) CRM activity table integration (CRITICAL)
+We have a Wolfpack Wash CRM with an Activity feed. You must write activity entries so D2D actions appear there.
+- First, search the existing DB schema (or codebase) for an activity table name among:
+  activities, activity_log, crm_activity, timeline_events
+- If found, use it.
+- If not found, create crm_activity with:
+  - id uuid pk default gen_random_uuid()
+  - created_at timestamptz default now()
+  - business_unit text default 'wolfpack_wash'
+  - activity_type text not null -- 'd2d_touch_created','d2d_quote_created','d2d_media_uploaded'
+  - lead_id uuid null
+  - title text not null
+  - details jsonb null
+  - actor text null
+
+SUPABASE STORAGE
+- Bucket: business-media (create if missing)
+- Path convention: /wolfpack_wash/{lead_id}/YYYY/MM/DD/{uuid}-{filename}
+- Use signed URLs for display in UI.
+
+DEDUP + ADDRESS NORMALIZATION (MUST)
+When rep drops a pin or enters address:
+- Normalize address fields (trim, uppercase state, standardize spacing)
+- Dedup logic:
+  - First try exact match on (address_line1 + zip)
+  - If zip missing, use lat/lng proximity (within ~30 meters) to find existing lead
+If lead exists:
+- Do NOT create a new lead
+- Update lead.updated_at, last_touch_at
+- Create new d2d_touches row
+If lead does not exist:
+- Create lead, then create first touch
+
+PHONE + EMAIL NORMALIZATION
+- Normalize phone to E.164 US +1 if possible
+- Validate phone length
+- Validate email format if provided
+
+OFFLINE-FIRST (IMPORTANT)
+If network is unavailable:
+- Save pending “touch” payloads in localStorage queue
+- Show a badge “X pending sync”
+- Provide a “Sync now” button
+- On app load and when back online, auto-sync queued actions
+- Ensure idempotency: use a client_generated_id in payload; server ignores duplicates
+
+CALL/TEXT ACTIONS + LOGGING (MUST)
+On lead detail and after save:
+- Buttons: Call (tel:), Text (sms:), Open in Maps
+- When user taps Call/Text, log a d2d_touch with:
+  touch_type='call' or 'text'
+  outcome='contacted' (or 'note') with notes 'Call initiated' / 'Text initiated'
+
+CONFIGURABLE SERVICES LIST (LONGEVITY)
+Do not hard-code services in the UI.
+Create table d2d_services:
+- id uuid pk default gen_random_uuid()
+- business_unit text default 'wolfpack_wash'
+- key text unique not null  -- 'house_wash', 'driveway', 'gutters', etc
+- label text not null
+- active boolean default true
+Seed with:
+- House Wash
+- Driveway/Walkway
+- Roof Wash
+- Gutters
+- Windows
+- Deck/Fence
+- Other (requires text input)
+
+UI PAGES
+- /login
+- /canvass (map + bottom sheet)
+- /leads (list with filters)
+- /leads/[id] (lead detail: touches timeline, quotes, media, followups)
+- /followups (all leads where next_followup_at <= now or within 7 days)
+- /admin (admin-only: reps list, basic stats, export)
+
+CANVASS PAGE UX (FAST ON PHONE)
+Top:
+- Address search
+- “Use My Location”
+Map:
+- Tap to drop pin
+Bottom sheet form (minimal required fields):
+- Auto-filled address (editable)
+- Outcome (dropdown) for the knock: no_answer/contacted/interested/quoted/booked/not_interested/do_not_knock
+- Homeowner Name (optional unless booked)
+- Phone (optional unless interested/quoted/booked)
+- Email (optional)
+- Services checkboxes (from d2d_services; required if quoted/booked)
+- Quote builder (optional):
+  - Add line item (service + price)
+  - Auto-calc total
+- Next follow-up controls:
+  - next_followup_at (optional)
+  - channel (call/text/knock)
+  - priority (low/med/high)
+- Notes
+- Media capture:
+  - Upload image/video from phone camera
+Save:
+- Creates/updates lead + creates touch + creates quote if line items present + uploads media if present
+After save:
+- Toast “Saved”
+- Quick actions: Call/Text/Open Maps
+- “Next House” clears form but keeps map position
+
+FOLLOW-UP LOGIC (MUST)
+When a touch is saved:
+- If outcome is 'interested' or 'quoted' and next_followup_at is empty, default:
+  - next_followup_at = now + 1 day at 10:00 AM local
+  - channel='text'
+  - priority='med'
+- If outcome is 'booked':
+  - lead.status='booked'
+  - priority='high'
+- If outcome is 'do_not_knock':
+  - lead.do_not_knock=true and lead.status='do_not_knock'
+
+LEADS LIST FILTERS
+- Status filter
+- Outcome last-touch filter
+- Service interested filter
+- Rep filter (admin only)
+- Search by name/phone/address
+- Sort by: last_touch_at desc, next_followup_at asc
+
+LEAD DETAIL PAGE
+- Lead header: address + homeowner + contact buttons
+- Touch timeline (chronological)
+- Quotes list (with line items and offer_version)
+- Media gallery (signed URLs)
+- Edit lead fields (contact info, status, tags)
+- Set next follow-up
+- Export lead record as JSON (admin)
+
+CRM ADAPTER LAYER (REQUIRED)
+Do NOT scatter direct table names around the code.
+Create lib/crmAdapter.ts with functions:
+- upsertLead(payload)
+- createTouch(payload)
+- createQuote(payload)
+- uploadMedia(file)
+- logActivity(activityPayload)
+- findLeadByAddressOrLatLng(address, latlng)
+This isolates schema changes.
+
+SERVER ROUTES (WRITE PATHS)
+Implement route handlers under /app/api:
+- POST /api/leads/upsert
+- POST /api/touches/create
+- POST /api/quotes/create
+- POST /api/media/upload
+- POST /api/activity/log
+- POST /api/sync/batch (accepts offline queue array; processes idempotently)
+
+ENV VARS
+- NEXTAUTH_URL
+- NEXTAUTH_SECRET
+- ADMIN_EMAILS
+- REPS_EMAILS
+- SUPABASE_URL
+- SUPABASE_ANON_KEY
+- SUPABASE_SERVICE_ROLE_KEY
+- GOOGLE_CLIENT_ID
+- GOOGLE_CLIENT_SECRET
+- GOOGLE_MAPS_API_KEY
+
+RLS + SECURITY
+- Prefer server-side writes with service role.
+- Reads should enforce role:
+  - reps see only their own assigned leads/touches unless admin
+- Include SQL policies for tables if using client-side reads.
+- NEVER expose tokens/keys to client.
+
+DELIVERABLES
+1) Working Replit project code
+2) SQL migrations for new tables (leads if needed, d2d_touches, d2d_quotes, d2d_media, d2d_services, crm_activity if needed)
+3) README: setup + env + how it integrates into CRM activity feed
+4) List files created/edited
+5) Seed script to insert default services.
+
+START NOW
+- Scaffold app
+- Implement auth + role middleware
+- Implement map canvass UI with reverse geocode and dedup
+- Implement offline queue + batch sync
+- Implement lead list + lead detail timeline
+- Implement quotes + media upload
+- Implement crmAdapter + activity logging
+- Ensure mobile UX is fast and usable.
