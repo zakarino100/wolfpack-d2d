@@ -9,9 +9,16 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import MapView, { Marker, Region, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
+import { MapViewWrapper, MapMarker } from "@/components/MapViewWrapper";
 import * as ImagePicker from "expo-image-picker";
+
+type Region = {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+};
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -72,7 +79,7 @@ export default function CanvassScreen() {
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
 
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
   const [selectedLocation, setSelectedLocation] = useState<{
@@ -402,10 +409,9 @@ export default function CanvassScreen() {
 
   return (
     <View style={styles.container}>
-      <MapView
+      <MapViewWrapper
         ref={mapRef}
         style={styles.map}
-        provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
         onRegionChangeComplete={setRegion}
         onPress={handleMapPress}
@@ -415,7 +421,7 @@ export default function CanvassScreen() {
         userInterfaceStyle={isDark ? "dark" : "light"}
       >
         {selectedLocation ? (
-          <Marker
+          <MapMarker
             coordinate={selectedLocation}
             pinColor={theme.primary}
           />
@@ -423,7 +429,7 @@ export default function CanvassScreen() {
 
         {leads.map((lead) =>
           lead.latitude && lead.longitude ? (
-            <Marker
+            <MapMarker
               key={lead.id}
               coordinate={{ latitude: lead.latitude, longitude: lead.longitude }}
               pinColor={getMarkerColor(lead.status)}
@@ -447,7 +453,7 @@ export default function CanvassScreen() {
             />
           ) : null
         )}
-      </MapView>
+      </MapViewWrapper>
 
       <View style={[styles.searchContainer, { top: insets.top + Spacing.md }]}>
         <View style={[styles.searchBar, { backgroundColor: theme.backgroundRoot }, Shadows.md]}>
