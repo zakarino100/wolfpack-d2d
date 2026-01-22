@@ -46,9 +46,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/auth/google/callback", async (req: Request, res: Response) => {
+    console.log("OAuth callback hit with query:", req.query);
     const { code } = req.query;
 
     if (!code) {
+      console.log("No code provided");
       return res.status(400).json({ error: "No code provided" });
     }
 
@@ -56,6 +58,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
       const host = req.get("x-forwarded-host") || req.get("host");
       const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
+      console.log("Callback redirectUri:", redirectUri);
 
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -83,9 +86,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       const userInfo = await userInfoResponse.json();
+      console.log("User info from Google:", userInfo.email, userInfo.name);
       const role = getUserRole(userInfo.email);
+      console.log("User role:", role);
 
       if (!role) {
+        console.log("User not authorized - email not in ADMIN_EMAILS or REPS_EMAILS");
         return res.redirect(
           `wolfpackd2d://auth/callback?error=unauthorized`
         );
