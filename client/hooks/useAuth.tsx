@@ -106,32 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const authUrl = `${baseUrl}api/auth/google?app_redirect_uri=${encodeURIComponent(redirectUrl)}`;
       console.log("Auth URL:", authUrl);
       
-      const result = await WebBrowser.openAuthSessionAsync(
-        authUrl,
-        redirectUrl
-      );
-      
-      console.log("WebBrowser result:", result);
-
-      if (result.type === "success" && result.url) {
-        const url = new URL(result.url);
-        const token = url.searchParams.get("token");
-        const error = url.searchParams.get("error");
-        
-        if (error) {
-          console.error("Auth error from callback:", error);
-          return;
-        }
-        
-        if (token) {
-          await setAuthToken(token);
-          await refreshUser();
-        }
-      }
+      await WebBrowser.openBrowserAsync(authUrl);
     } catch (error) {
       console.error("Google sign in failed:", error);
     }
-  }, [refreshUser]);
+  }, []);
 
   const signOut = useCallback(async () => {
     try {
