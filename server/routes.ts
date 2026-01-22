@@ -33,7 +33,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const host = req.get("x-forwarded-host") || req.get("host");
     const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
     
+    const appRedirectUri = req.query.app_redirect_uri as string || "wolfpackd2d://auth/callback";
     console.log("OAuth redirect_uri:", redirectUri);
+    console.log("App redirect_uri:", appRedirectUri);
 
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     authUrl.searchParams.set("client_id", clientId!);
@@ -41,13 +43,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("scope", "email profile");
     authUrl.searchParams.set("access_type", "offline");
+    authUrl.searchParams.set("state", Buffer.from(appRedirectUri).toString("base64"));
 
     res.redirect(authUrl.toString());
   });
 
   app.get("/api/auth/google/callback", async (req: Request, res: Response) => {
     console.log("OAuth callback hit with query:", req.query);
-    const { code } = req.query;
+    const { code, state } = req.query;
+    
+    let appRedirectUri = "wolfpackd2d://auth/callback";
+    if (state) {
+      try {
+        appRedirectUri = Buffer.from(state as string, "base64").toString("utf-8");
+        console.log("Decoded app redirect URI:", appRedirectUri);
+      } catch (e) {
+        console.error("Failed to decode state:", e);
+      }
+    }
 
     if (!code) {
       console.log("No code provided");
@@ -92,7 +105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!role) {
         console.log("User not authorized - email not in ADMIN_EMAILS or REPS_EMAILS");
-        const unauthorizedLink = `wolfpackd2d://auth/callback?error=unauthorized`;
+        const unauthorizedLink = `${appRedirectUri}${appRedirectUri.includes('?') ? '&' : '?'}error=unauthorized`;
         return res.send(`
           <!DOCTYPE html>
           <html>
@@ -136,7 +149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      const deepLink = `wolfpackd2d://auth/callback?token=${token}`;
+      const deepLink = `${appRedirectUri}${appRedirectUri.includes('?') ? '&' : '?'}token=${token}`;
       console.log("Redirecting to deep link:", deepLink);
       
       res.send(`
@@ -165,7 +178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       `);
     } catch (error) {
       console.error("Google auth error:", error);
-      const errorLink = `wolfpackd2d://auth/callback?error=auth_failed`;
+      const errorLink = `${appRedirectUri}${appRedirectUri.includes('?') ? '&' : '?'}error=auth_failed`;
       res.send(`
         <!DOCTYPE html>
         <html>
@@ -190,6 +203,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
         </body>
         </html>
       `);
+    }
+  });
+
+  // Exchange Google access token for our JWT (used by expo-auth-session)
+  app.post("/api/auth/google/token", async (req: Request, res: Response) => {
+    const { accessToken } = req.body;
+    
+    if (!accessToken) {
+      return res.status(400).json({ error: "No access token provided" });
+    }
+    
+    try {
+      // Get user info from Google using the access token
+      const userInfoResponse = await fetch(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+      
+      if (!userInfoResponse.ok) {
+        return res.status(400).json({ error: "Invalid access token" });
+      }
+      
+      const userInfo = await userInfoResponse.json();
+      console.log("Token exchange - User info:", userInfo.email, userInfo.name);
+      
+      const role = getUserRole(userInfo.email);
+      console.log("Token exchange - User role:", role);
+      
+      if (!role) {
+        return res.status(403).json({ error: "User not authorized" });
+      }
+      
+      const user: UserPayload = {
+        email: userInfo.email,
+        name: userInfo.name,
+        picture: userInfo.picture,
+        role,
+      };
+      
+      const token = createToken(user);
+      
+      res.cookie("auth_token", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+      
+      res.json({ token, user });
+    } catch (error) {
+      console.error("Token exchange error:", error);
+      res.status(500).json({ error: "Failed to exchange token" });
     }
   });
 

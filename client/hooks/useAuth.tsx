@@ -7,6 +7,7 @@ import React, {
   ReactNode,
 } from "react";
 import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 import { User } from "@/types";
 import {
   getStoredUser,
@@ -64,18 +65,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadUser();
   }, [refreshUser]);
 
+  useEffect(() => {
+    const handleDeepLink = async (event: { url: string }) => {
+      console.log("Deep link received:", event.url);
+      const url = new URL(event.url);
+      const token = url.searchParams.get("token");
+      const error = url.searchParams.get("error");
+      
+      if (error) {
+        console.error("Auth error:", error);
+        return;
+      }
+      
+      if (token) {
+        console.log("Token received, saving...");
+        await setAuthToken(token);
+        await refreshUser();
+      }
+    };
+
+    const subscription = Linking.addEventListener("url", handleDeepLink);
+
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink({ url });
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshUser]);
+
   const signInWithGoogle = useCallback(async () => {
     try {
       const baseUrl = getApiUrl();
-      const authUrl = `${baseUrl}api/auth/google`;
+      const redirectUrl = Linking.createURL("auth/callback");
+      console.log("Expected redirect URL:", redirectUrl);
+      
+      const authUrl = `${baseUrl}api/auth/google?app_redirect_uri=${encodeURIComponent(redirectUrl)}`;
+      console.log("Auth URL:", authUrl);
+      
       const result = await WebBrowser.openAuthSessionAsync(
         authUrl,
-        `wolfpackd2d://auth/callback`
+        redirectUrl
       );
+      
+      console.log("WebBrowser result:", result);
 
       if (result.type === "success" && result.url) {
         const url = new URL(result.url);
         const token = url.searchParams.get("token");
+        const error = url.searchParams.get("error");
+        
+        if (error) {
+          console.error("Auth error from callback:", error);
+          return;
+        }
+        
         if (token) {
           await setAuthToken(token);
           await refreshUser();
