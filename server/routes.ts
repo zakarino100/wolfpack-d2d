@@ -29,7 +29,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/auth/google", async (req: Request, res: Response) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
-    const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/google/callback`;
+    const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
+    const host = req.get("x-forwarded-host") || req.get("host");
+    const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
+    
+    console.log("OAuth redirect_uri:", redirectUri);
 
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     authUrl.searchParams.set("client_id", clientId!);
@@ -49,7 +53,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/google/callback`;
+      const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
+      const host = req.get("x-forwarded-host") || req.get("host");
+      const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
 
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
