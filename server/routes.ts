@@ -92,9 +92,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!role) {
         console.log("User not authorized - email not in ADMIN_EMAILS or REPS_EMAILS");
-        return res.redirect(
-          `wolfpackd2d://auth/callback?error=unauthorized`
-        );
+        const unauthorizedLink = `wolfpackd2d://auth/callback?error=unauthorized`;
+        return res.send(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Access Denied</title>
+            <style>
+              body { font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #ff9500; color: white; text-align: center; }
+              .container { padding: 20px; }
+              a { color: white; font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h2>Access Denied</h2>
+              <p>Your email is not authorized for this app.</p>
+              <p><a href="${unauthorizedLink}">Tap here to return</a></p>
+            </div>
+            <script>
+              setTimeout(function() { window.location.href = "${unauthorizedLink}"; }, 2000);
+            </script>
+          </body>
+          </html>
+        `);
       }
 
       const user: UserPayload = {
@@ -113,10 +136,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      res.redirect(`wolfpackd2d://auth/callback?token=${token}`);
+      const deepLink = `wolfpackd2d://auth/callback?token=${token}`;
+      console.log("Redirecting to deep link:", deepLink);
+      
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Signing in...</title>
+          <style>
+            body { font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0066CC; color: white; text-align: center; }
+            .container { padding: 20px; }
+            a { color: white; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h2>Signing you in...</h2>
+            <p>If the app doesn't open automatically, <a href="${deepLink}">tap here</a>.</p>
+          </div>
+          <script>
+            window.location.href = "${deepLink}";
+          </script>
+        </body>
+        </html>
+      `);
     } catch (error) {
       console.error("Google auth error:", error);
-      res.redirect(`wolfpackd2d://auth/callback?error=auth_failed`);
+      const errorLink = `wolfpackd2d://auth/callback?error=auth_failed`;
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Error</title>
+          <style>
+            body { font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #cc0000; color: white; text-align: center; }
+            .container { padding: 20px; }
+            a { color: white; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h2>Sign in failed</h2>
+            <p><a href="${errorLink}">Tap here to return to the app</a>.</p>
+          </div>
+          <script>
+            window.location.href = "${errorLink}";
+          </script>
+        </body>
+        </html>
+      `);
     }
   });
 
