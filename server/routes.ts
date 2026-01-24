@@ -21,6 +21,14 @@ import {
   getMedia,
   getServices,
   findLeadByAddressOrLatLng,
+  createPin,
+  updatePin,
+  getPin,
+  getPins,
+  getPinsWithLeads,
+  createLeadWithPin,
+  canEditPin,
+  canEditLead,
 } from "./lib/crmAdapter";
 import { supabase } from "./lib/supabase";
 
@@ -566,6 +574,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ activity });
     } catch (error) {
       res.status(500).json({ error: "Failed to log activity" });
+    }
+  });
+
+  app.get("/api/pins", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const pins = await getPinsWithLeads();
+      res.json({ pins });
+    } catch (error) {
+      console.error("Failed to get pins:", error);
+      res.status(500).json({ error: "Failed to get pins" });
+    }
+  });
+
+  app.get("/api/pins/:id", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const pin = await getPin(req.params.id);
+      const canEdit = await canEditPin(req.params.id, user.email);
+      res.json({ pin, canEdit });
+    } catch (error) {
+      res.status(404).json({ error: "Pin not found" });
+    }
+  });
+
+  app.post("/api/pins/create", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const pin = await createPin({
+        ...req.body,
+        created_by: user.email,
+      });
+
+      await logActivity({
+        activity_type: "pin_created",
+        title: `Pin created at ${pin.address_line1 || 'unknown location'}`,
+        details: { pin_id: pin.id, latitude: pin.latitude, longitude: pin.longitude },
+        actor: user.email,
+      });
+
+      res.json({ pin });
+    } catch (error) {
+      console.error("Failed to create pin:", error);
+      res.status(500).json({ error: "Failed to create pin" });
+    }
+  });
+
+  app.put("/api/pins/:id", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const pin = await updatePin(req.params.id, req.body, user.email);
+      res.json({ pin });
+    } catch (error: any) {
+      if (error.message?.includes("Not authorized")) {
+        return res.status(403).json({ error: "Not authorized to edit this pin" });
+      }
+      res.status(500).json({ error: "Failed to update pin" });
+    }
+  });
+
+  app.post("/api/pins/create-with-lead", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const { pin: pinData, lead: leadData, createLead } = req.body;
+
+      const result = await createLeadWithPin(
+        {
+          pin: { ...pinData, created_by: user.email },
+          lead: createLead ? leadData : null,
+        },
+        user.email
+      );
+
+      await logActivity({
+        activity_type: result.lead ? "pin_and_lead_created" : "pin_created",
+        lead_id: result.lead?.id || null,
+        title: result.lead
+          ? `Pin and lead created at ${result.pin.address_line1 || 'unknown location'}`
+          : `Pin created at ${result.pin.address_line1 || 'unknown location'}`,
+        details: { pin_id: result.pin.id },
+        actor: user.email,
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to create pin with lead:", error);
+      res.status(500).json({ error: "Failed to create pin with lead" });
+    }
+  });
+
+  app.get("/api/leads/:id/can-edit", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const canEdit = await canEditLead(req.params.id, user.email, user.role === "admin");
+      res.json({ canEdit });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check permissions" });
     }
   });
 

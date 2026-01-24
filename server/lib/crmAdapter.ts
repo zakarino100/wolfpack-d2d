@@ -51,6 +51,24 @@ export interface ActivityPayload {
   actor?: string | null;
 }
 
+export interface PinPayload {
+  title?: string | null;
+  notes?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  latitude: number;
+  longitude: number;
+  created_by: string;
+  business_unit?: string;
+}
+
+export interface CreateLeadWithPinPayload {
+  pin: PinPayload;
+  lead?: Omit<LeadPayload, 'latitude' | 'longitude'> | null;
+}
+
 function normalizeAddress(address: string): string {
   return address.trim().toUpperCase().replace(/\s+/g, " ");
 }
@@ -359,4 +377,158 @@ export async function getServices() {
 
   if (error) throw error;
   return data;
+}
+
+export async function createPin(payload: PinPayload) {
+  const { data, error } = await supabase
+    .from("pins")
+    .insert({
+      ...payload,
+      business_unit: payload.business_unit || "wolfpack_wash",
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updatePin(pinId: string, payload: Partial<PinPayload>, userEmail: string) {
+  const { data: existing } = await supabase
+    .from("pins")
+    .select("created_by")
+    .eq("id", pinId)
+    .single();
+
+  if (!existing || existing.created_by !== userEmail) {
+    throw new Error("Not authorized to edit this pin");
+  }
+
+  const { data, error } = await supabase
+    .from("pins")
+    .update({
+      ...payload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", pinId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getPin(pinId: string) {
+  const { data, error } = await supabase
+    .from("pins")
+    .select("*")
+    .eq("id", pinId)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getPins() {
+  const { data, error } = await supabase
+    .from("pins")
+    .select("*")
+    .eq("business_unit", "wolfpack_wash")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getPinsWithLeads() {
+  const { data: pins, error: pinsError } = await supabase
+    .from("pins")
+    .select("*")
+    .eq("business_unit", "wolfpack_wash")
+    .order("created_at", { ascending: false });
+
+  if (pinsError) throw pinsError;
+
+  const { data: leads, error: leadsError } = await supabase
+    .from("leads")
+    .select("*")
+    .not("pin_id", "is", null);
+
+  if (leadsError) throw leadsError;
+
+  const leadsByPinId = new Map();
+  for (const lead of leads || []) {
+    if (lead.pin_id) {
+      leadsByPinId.set(lead.pin_id, lead);
+    }
+  }
+
+  return (pins || []).map((pin: Record<string, unknown>) => ({
+    ...pin,
+    lead: leadsByPinId.get(pin.id) || null,
+  }));
+}
+
+export async function createLeadWithPin(payload: CreateLeadWithPinPayload, repEmail: string) {
+  const pin = await createPin(payload.pin);
+
+  if (payload.lead) {
+    const leadData = {
+      ...payload.lead,
+      address_line1: payload.lead.address_line1 || payload.pin.address_line1 || "Unknown",
+      city: payload.lead.city || payload.pin.city,
+      state: payload.lead.state || payload.pin.state,
+      zip: payload.lead.zip || payload.pin.zip,
+      latitude: payload.pin.latitude,
+      longitude: payload.pin.longitude,
+      pin_id: pin.id,
+      created_by: repEmail,
+      assigned_rep_email: repEmail,
+      source: "d2d",
+      business_unit: "wolfpack_wash",
+      last_touch_at: new Date().toISOString(),
+    };
+
+    const normalizedData = {
+      ...leadData,
+      address_line1: normalizeAddress(leadData.address_line1),
+      state: leadData.state?.toUpperCase().trim() || null,
+      phone: normalizePhone(leadData.phone),
+      email: normalizeEmail(leadData.email),
+    };
+
+    const { data: lead, error: leadError } = await supabase
+      .from("leads")
+      .insert(normalizedData)
+      .select()
+      .single();
+
+    if (leadError) throw leadError;
+
+    return { pin, lead };
+  }
+
+  return { pin, lead: null };
+}
+
+export async function canEditPin(pinId: string, userEmail: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("pins")
+    .select("created_by")
+    .eq("id", pinId)
+    .single();
+
+  return data?.created_by === userEmail;
+}
+
+export async function canEditLead(leadId: string, userEmail: string, isAdmin: boolean): Promise<boolean> {
+  if (isAdmin) return true;
+
+  const { data } = await supabase
+    .from("leads")
+    .select("created_by, assigned_rep_email")
+    .eq("id", leadId)
+    .single();
+
+  return data?.created_by === userEmail || data?.assigned_rep_email === userEmail;
 }
