@@ -235,12 +235,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // HTTPS callback for mobile auth - this URL is detected by WebBrowser.openAuthSessionAsync
+  // HTTPS callback for mobile auth
   app.get("/auth/callback", (req: Request, res: Response) => {
-    // The token/error query params are passed through from the OAuth callback
-    // This page exists so WebBrowser.openAuthSessionAsync can intercept the URL
-    const token = req.query.token;
-    const error = req.query.error;
+    const token = req.query.token as string;
+    const error = req.query.error as string;
+    const host = req.get("x-forwarded-host") || req.get("host") || "";
+    const hostWithoutPort = host.split(":")[0];
+    
+    // Create Expo deep link for Expo Go
+    const expoDeepLink = token 
+      ? `exp://${hostWithoutPort}/--/auth/callback?token=${token}`
+      : `exp://${hostWithoutPort}/--/auth/callback?error=${error || 'auth_failed'}`;
     
     res.send(`
       <!DOCTYPE html>
@@ -252,12 +257,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         <style>
           body { font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0066CC; color: white; text-align: center; }
           .container { padding: 20px; }
+          .btn { display: inline-block; padding: 15px 30px; background: white; color: #0066CC; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 20px; }
         </style>
       </head>
       <body>
         <div class="container">
           <h2>${error ? 'Authentication Failed' : 'Authentication Complete'}</h2>
-          <p>You can close this window and return to the app.</p>
+          <p>Tap the button below to return to the app.</p>
+          <a href="${expoDeepLink}" class="btn">Open App</a>
         </div>
       </body>
       </html>
