@@ -159,24 +159,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      // For HTTPS URLs, redirect to portless URL so Safari/iOS can detect it
-      let finalRedirectUri = appRedirectUri;
-      if (appRedirectUri.startsWith('https://') || appRedirectUri.startsWith('http://')) {
-        try {
-          const urlObj = new URL(appRedirectUri);
-          urlObj.port = ''; // Remove port - Replit proxy handles routing
-          finalRedirectUri = urlObj.href;
-        } catch (e) {
-          console.error("Failed to parse redirect URI:", e);
-        }
-      }
-      
-      const redirectUrl = `${finalRedirectUri}${finalRedirectUri.includes('?') ? '&' : '?'}token=${token}`;
+      const redirectUrl = `${appRedirectUri}${appRedirectUri.includes('?') ? '&' : '?'}token=${token}`;
       console.log("Redirecting to:", redirectUrl);
       
-      // For HTTPS URLs, do a direct redirect (WebBrowser.openAuthSessionAsync will intercept)
-      // For exp:// URLs, show a page with a link (Safari can't redirect to exp://)
-      if (finalRedirectUri.startsWith('https://') || finalRedirectUri.startsWith('http://')) {
+      // For HTTPS URLs, do a direct redirect to our callback page
+      if (appRedirectUri.startsWith('https://') || appRedirectUri.startsWith('http://')) {
         return res.redirect(redirectUrl);
       }
       
