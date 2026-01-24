@@ -8,6 +8,7 @@ import {
   Dimensions,
   ScrollView,
   Alert,
+  Switch,
 } from "react-native";
 import * as Location from "expo-location";
 import { MapViewWrapper, MapMarker } from "@/components/MapViewWrapper";
@@ -58,7 +59,7 @@ import { addPendingSync, getPendingSyncs, removePendingSync } from "@/lib/storag
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-type CanvassMode = "view" | "add_lead";
+type CanvassMode = "view" | "add_pin";
 
 const OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
   { value: "no_answer", label: "No Answer" },
@@ -97,6 +98,7 @@ export default function CanvassScreen() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [canvassMode, setCanvassMode] = useState<CanvassMode>("view");
 
+  const [createLead, setCreateLead] = useState(true);
   const [outcome, setOutcome] = useState<TouchOutcome | null>(null);
   const [homeownerName, setHomeownerName] = useState("");
   const [phone, setPhone] = useState("");
@@ -224,7 +226,7 @@ export default function CanvassScreen() {
   };
 
   const handleMapPress = async (e: { nativeEvent: { coordinate: { latitude: number; longitude: number } } }) => {
-    if (canvassMode !== "add_lead") return;
+    if (canvassMode !== "add_pin") return;
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const { latitude, longitude } = e.nativeEvent.coordinate;
@@ -246,12 +248,12 @@ export default function CanvassScreen() {
     }
   };
 
-  const handleAddLeadPress = () => {
-    if (canvassMode === "add_lead") {
+  const handleAddPinPress = () => {
+    if (canvassMode === "add_pin") {
       setCanvassMode("view");
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } else {
-      setCanvassMode("add_lead");
+      setCanvassMode("add_pin");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   };
@@ -312,6 +314,7 @@ export default function CanvassScreen() {
   };
 
   const resetForm = () => {
+    setCreateLead(true);
     setOutcome(null);
     setHomeownerName("");
     setPhone("");
@@ -326,69 +329,124 @@ export default function CanvassScreen() {
   };
 
   const handleSave = async () => {
-    if (!outcome || !address) {
+    if (createLead && !outcome) {
       Alert.alert("Error", "Please select an outcome");
+      return;
+    }
+    if (!address) {
+      Alert.alert("Error", "No address available");
       return;
     }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
 
-    const payload = {
-      client_generated_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      lead: {
-        address_line1: address.address_line1,
-        city: address.city,
-        state: address.state,
-        zip: address.zip,
-        latitude: address.latitude,
-        longitude: address.longitude,
-        homeowner_name: homeownerName || null,
-        phone: phone || null,
-        email: email || null,
-        services_interested: servicesInterested.length > 0 ? servicesInterested : null,
-      },
-      touch: {
-        touch_type: "knock" as const,
-        outcome,
-        notes: notes || null,
-        next_followup_at: followupDate?.toISOString() || null,
-        followup_channel: followupChannel,
-        followup_priority: followupPriority,
-      },
-      quote:
-        quoteLineItems.length > 0
-          ? {
-              quote_line_items: quoteLineItems,
-              quote_amount: quoteLineItems.reduce((sum, item) => sum + item.price, 0),
-            }
-          : null,
-    };
-
     try {
-      await apiRequest("POST", "/api/touches/create", payload);
-      Alert.alert("Saved!", "Touch logged successfully", [
-        {
-          text: "Next House",
-          onPress: () => {
-            resetForm();
-            setShowForm(false);
-            setSelectedLocation(null);
-            setAddress(null);
-            loadLeads();
+      if (createLead) {
+        const payload = {
+          client_generated_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          lead: {
+            address_line1: address.address_line1,
+            city: address.city,
+            state: address.state,
+            zip: address.zip,
+            latitude: address.latitude,
+            longitude: address.longitude,
+            homeowner_name: homeownerName || null,
+            phone: phone || null,
+            email: email || null,
+            services_interested: servicesInterested.length > 0 ? servicesInterested : null,
           },
-        },
-        { text: "Stay Here", style: "cancel" },
-      ]);
+          touch: {
+            touch_type: "knock" as const,
+            outcome,
+            notes: notes || null,
+            next_followup_at: followupDate?.toISOString() || null,
+            followup_channel: followupChannel,
+            followup_priority: followupPriority,
+          },
+          quote:
+            quoteLineItems.length > 0
+              ? {
+                  quote_line_items: quoteLineItems,
+                  quote_amount: quoteLineItems.reduce((sum, item) => sum + item.price, 0),
+                }
+              : null,
+        };
+
+        await apiRequest("POST", "/api/touches/create", payload);
+        Alert.alert("Saved!", "Lead and touch logged successfully", [
+          {
+            text: "Next House",
+            onPress: () => {
+              resetForm();
+              setShowForm(false);
+              setSelectedLocation(null);
+              setAddress(null);
+              loadLeads();
+            },
+          },
+          { text: "Stay Here", style: "cancel" },
+        ]);
+      } else {
+        const pinPayload = {
+          title: notes || null,
+          notes: notes || null,
+          address_line1: address.address_line1,
+          city: address.city,
+          state: address.state,
+          zip: address.zip,
+          latitude: address.latitude,
+          longitude: address.longitude,
+        };
+
+        await apiRequest("POST", "/api/pins/create", pinPayload);
+        Alert.alert("Saved!", "Pin created successfully", [
+          {
+            text: "Next House",
+            onPress: () => {
+              resetForm();
+              setShowForm(false);
+              setSelectedLocation(null);
+              setAddress(null);
+              loadLeads();
+            },
+          },
+          { text: "Stay Here", style: "cancel" },
+        ]);
+      }
     } catch (error) {
-      await addPendingSync({
-        id: payload.client_generated_id,
-        type: "touch",
-        payload,
-        created_at: new Date().toISOString(),
-        retries: 0,
-      });
-      Alert.alert("Offline", "Touch saved locally. Will sync when online.");
+      if (createLead) {
+        const payload = {
+          client_generated_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          lead: {
+            address_line1: address.address_line1,
+            city: address.city,
+            state: address.state,
+            zip: address.zip,
+            latitude: address.latitude,
+            longitude: address.longitude,
+            homeowner_name: homeownerName || null,
+            phone: phone || null,
+            email: email || null,
+            services_interested: servicesInterested.length > 0 ? servicesInterested : null,
+          },
+          touch: {
+            touch_type: "knock" as const,
+            outcome,
+            notes: notes || null,
+          },
+          quote: null,
+        };
+        await addPendingSync({
+          id: payload.client_generated_id,
+          type: "touch",
+          payload,
+          created_at: new Date().toISOString(),
+          retries: 0,
+        });
+      }
+      Alert.alert("Offline", "Saved locally. Will sync when online.");
     } finally {
       setSaving(false);
     }
@@ -500,7 +558,7 @@ export default function CanvassScreen() {
         <SyncBadge onSync={syncPending} />
       </View>
 
-      {canvassMode === "add_lead" ? (
+      {canvassMode === "add_pin" ? (
         <Animated.View
           entering={FadeInUp.springify()}
           style={[styles.modeIndicator, { backgroundColor: theme.primary }]}
@@ -513,24 +571,24 @@ export default function CanvassScreen() {
       ) : null}
 
       <Pressable
-        onPress={handleAddLeadPress}
+        onPress={handleAddPinPress}
         style={[
-          styles.addLeadBtn,
+          styles.addPinBtn,
           { 
-            backgroundColor: canvassMode === "add_lead" ? theme.error : theme.primary,
+            backgroundColor: canvassMode === "add_pin" ? theme.error : theme.primary,
             bottom: insets.bottom + Spacing.xl + (showForm ? SCREEN_HEIGHT * 0.4 : 60),
           },
           Shadows.lg,
         ]}
       >
         <Feather 
-          name={canvassMode === "add_lead" ? "x" : "plus"} 
+          name={canvassMode === "add_pin" ? "x" : "plus"} 
           size={24} 
           color="white" 
         />
-        {canvassMode !== "add_lead" ? (
+        {canvassMode !== "add_pin" ? (
           <ThemedText type="body" style={{ color: "white", fontWeight: "600", marginLeft: Spacing.sm }}>
-            Add Lead
+            Add Pin
           </ThemedText>
         ) : null}
       </Pressable>
@@ -580,59 +638,87 @@ export default function CanvassScreen() {
               </ThemedText>
             </View>
 
-            <FormSelect
-              label="Outcome *"
-              value={outcome}
-              options={OUTCOME_OPTIONS}
-              onChange={setOutcome}
-            />
+            {!existingLead ? (
+              <View style={[styles.toggleRow, { borderColor: theme.borderLight }]}>
+                <View style={styles.toggleInfo}>
+                  <Feather name="user-plus" size={18} color={createLead ? theme.primary : theme.textSecondary} />
+                  <View style={{ marginLeft: Spacing.sm }}>
+                    <ThemedText type="body" style={{ fontWeight: "600" }}>
+                      Create Lead
+                    </ThemedText>
+                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                      {createLead ? "Pin will be linked to a new lead" : "Just dropping a pin for later"}
+                    </ThemedText>
+                  </View>
+                </View>
+                <Switch
+                  value={createLead}
+                  onValueChange={setCreateLead}
+                  trackColor={{ false: theme.borderLight, true: `${theme.primary}60` }}
+                  thumbColor={createLead ? theme.primary : "#f4f3f4"}
+                />
+              </View>
+            ) : null}
 
-            <FormInput
-              label="Homeowner Name"
-              value={homeownerName}
-              onChangeText={setHomeownerName}
-              placeholder="John Smith"
-            />
-
-            <FormInput
-              label="Phone"
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="(555) 123-4567"
-              keyboardType="phone-pad"
-            />
-
-            <FormInput
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="john@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-
-            <ServiceCheckbox
-              services={services}
-              selected={servicesInterested}
-              onChange={setServicesInterested}
-            />
-
-            {outcome === "quoted" || outcome === "booked" ? (
-              <QuoteBuilder
-                services={services}
-                lineItems={quoteLineItems}
-                onChange={setQuoteLineItems}
+            {createLead ? (
+              <FormSelect
+                label="Outcome *"
+                value={outcome}
+                options={OUTCOME_OPTIONS}
+                onChange={setOutcome}
               />
             ) : null}
 
-            <FollowupPicker
-              date={followupDate}
-              channel={followupChannel}
-              priority={followupPriority}
-              onDateChange={setFollowupDate}
-              onChannelChange={setFollowupChannel}
-              onPriorityChange={setFollowupPriority}
-            />
+            {createLead ? (
+              <>
+                <FormInput
+                  label="Homeowner Name"
+                  value={homeownerName}
+                  onChangeText={setHomeownerName}
+                  placeholder="John Smith"
+                />
+
+                <FormInput
+                  label="Phone"
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="(555) 123-4567"
+                  keyboardType="phone-pad"
+                />
+
+                <FormInput
+                  label="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="john@example.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+
+                <ServiceCheckbox
+                  services={services}
+                  selected={servicesInterested}
+                  onChange={setServicesInterested}
+                />
+
+                {outcome === "quoted" || outcome === "booked" ? (
+                  <QuoteBuilder
+                    services={services}
+                    lineItems={quoteLineItems}
+                    onChange={setQuoteLineItems}
+                  />
+                ) : null}
+
+                <FollowupPicker
+                  date={followupDate}
+                  channel={followupChannel}
+                  priority={followupPriority}
+                  onDateChange={setFollowupDate}
+                  onChannelChange={setFollowupChannel}
+                  onPriorityChange={setFollowupPriority}
+                />
+              </>
+            ) : null}
 
             <FormInput
               label="Notes"
@@ -647,10 +733,10 @@ export default function CanvassScreen() {
             <View style={styles.formActions}>
               <Button
                 onPress={handleSave}
-                disabled={saving || !outcome}
+                disabled={saving || (createLead && !outcome)}
                 style={styles.saveBtn}
               >
-                {saving ? "Saving..." : "Save Touch"}
+                {saving ? "Saving..." : createLead ? "Save Lead" : "Save Pin"}
               </Button>
 
               <Pressable
@@ -686,7 +772,7 @@ export default function CanvassScreen() {
       ) : (
         <View style={[styles.hint, { bottom: insets.bottom + Spacing.xl }]}>
           <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center" }}>
-            Tap "Add Lead" to drop a pin, or tap an existing pin
+            Tap "Add Pin" to drop a pin, or tap an existing marker
           </ThemedText>
         </View>
       )}
@@ -807,7 +893,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.md,
   },
-  addLeadBtn: {
+  addPinBtn: {
     position: "absolute",
     right: Spacing.lg,
     flexDirection: "row",
@@ -824,5 +910,20 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     marginBottom: Spacing.lg,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.lg,
+  },
+  toggleInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
   },
 });
