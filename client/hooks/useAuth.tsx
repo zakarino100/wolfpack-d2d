@@ -115,17 +115,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     try {
       const baseUrl = getApiUrl();
-      const redirectUrl = Linking.createURL("auth/callback");
+      // Use the HTTPS redirect URL that works better with Safari -> Expo Go
+      const redirectUrl = `${baseUrl}auth/callback`;
       console.log("Expected redirect URL:", redirectUrl);
       
       const authUrl = `${baseUrl}api/auth/google?app_redirect_uri=${encodeURIComponent(redirectUrl)}`;
       console.log("Auth URL:", authUrl);
       
-      await WebBrowser.openBrowserAsync(authUrl);
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+      console.log("Auth session result:", result.type);
+      
+      if (result.type === "success" && result.url) {
+        // Extract token from the returned URL
+        const tokenMatch = result.url.match(/[?&]token=([^&]+)/);
+        if (tokenMatch) {
+          const token = decodeURIComponent(tokenMatch[1]);
+          console.log("Token extracted from auth session");
+          await setAuthToken(token);
+          await refreshUser();
+        }
+      }
     } catch (error) {
       console.error("Google sign in failed:", error);
     }
-  }, []);
+  }, [refreshUser]);
 
   const signOut = useCallback(async () => {
     try {

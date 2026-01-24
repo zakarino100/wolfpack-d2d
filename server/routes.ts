@@ -159,9 +159,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      const deepLink = `${appRedirectUri}${appRedirectUri.includes('?') ? '&' : '?'}token=${token}`;
-      console.log("Redirecting to deep link:", deepLink);
+      const redirectUrl = `${appRedirectUri}${appRedirectUri.includes('?') ? '&' : '?'}token=${token}`;
+      console.log("Redirecting to:", redirectUrl);
       
+      // For HTTPS URLs, do a direct redirect (WebBrowser.openAuthSessionAsync will intercept)
+      // For exp:// URLs, show a page with a link (Safari can't redirect to exp://)
+      if (appRedirectUri.startsWith('https://') || appRedirectUri.startsWith('http://')) {
+        return res.redirect(redirectUrl);
+      }
+      
+      // Fallback for exp:// deep links
       res.send(`
         <!DOCTYPE html>
         <html>
@@ -178,10 +185,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         <body>
           <div class="container">
             <h2>Signing you in...</h2>
-            <p>If the app doesn't open automatically, <a href="${deepLink}">tap here</a>.</p>
+            <p>If the app doesn't open automatically, <a href="${redirectUrl}">tap here</a>.</p>
           </div>
           <script>
-            window.location.href = "${deepLink}";
+            window.location.href = "${redirectUrl}";
           </script>
         </body>
         </html>
@@ -214,6 +221,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         </html>
       `);
     }
+  });
+
+  // HTTPS callback for mobile auth - this URL is detected by WebBrowser.openAuthSessionAsync
+  app.get("/auth/callback", (req: Request, res: Response) => {
+    // The token/error query params are passed through from the OAuth callback
+    // This page exists so WebBrowser.openAuthSessionAsync can intercept the URL
+    const token = req.query.token;
+    const error = req.query.error;
+    
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Authentication Complete</title>
+        <style>
+          body { font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0066CC; color: white; text-align: center; }
+          .container { padding: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2>${error ? 'Authentication Failed' : 'Authentication Complete'}</h2>
+          <p>You can close this window and return to the app.</p>
+        </div>
+      </body>
+      </html>
+    `);
   });
 
   // Exchange Google access token for our JWT (used by expo-auth-session)
