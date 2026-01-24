@@ -40,7 +40,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
     let host = req.get("x-forwarded-host") || req.get("host") || "";
     
-    if (!host.includes(":")) {
+    // In production (replit.app domains), don't add port - it routes internally
+    // In development (.janeway.replit.dev), we need port 5000
+    const isProduction = host.includes(".replit.app");
+    if (!host.includes(":") && !isProduction) {
       host = `${host}:5000`;
     }
     const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
@@ -48,6 +51,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const appRedirectUri = req.query.app_redirect_uri as string || "wolfpackd2d://auth/callback";
     console.log("OAuth redirect_uri:", redirectUri);
     console.log("App redirect_uri:", appRedirectUri);
+    console.log("Is production:", isProduction);
 
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     authUrl.searchParams.set("client_id", clientId!);
@@ -83,11 +87,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
       let host = req.get("x-forwarded-host") || req.get("host") || "";
       
-      if (!host.includes(":")) {
+      // In production (replit.app domains), don't add port - it routes internally
+      // In development (.janeway.replit.dev), we need port 5000
+      const isProduction = host.includes(".replit.app");
+      if (!host.includes(":") && !isProduction) {
         host = `${host}:5000`;
       }
       const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
       console.log("Callback redirectUri:", redirectUri);
+      console.log("Callback isProduction:", isProduction);
 
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
