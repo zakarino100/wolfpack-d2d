@@ -79,3 +79,6 @@ ensurePreviewReachable = "/status"
 EXPO_PUBLIC_SUPABASE_URL = "${SUPABASE_URL}"
 EXPO_PUBLIC_SUPABASE_ANON_KEY = "${SUPABASE_ANON_KEY}"
 EXPO_PUBLIC_GOOGLE_MAPS_API_KEY = "${GOOGLE_MAPS_API_KEY}"
+
+[userenv.development]
+EXPO_PUBLIC_DOMAIN = "147bd261-da64-4ba4-b9b6-f72f0845aff2-00-x3gveabfcka4.janeway.replit.dev"

@@ -99,7 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = useCallback(async () => {
     try {
-      const baseUrl = getApiUrl();
+      const baseUrlRaw = getApiUrl();
+      const baseUrlObj = new URL(baseUrlRaw);
+      baseUrlObj.port = "";
+      const baseUrl = baseUrlObj.href;
+      
       const redirectUrl = Linking.createURL("auth/callback");
       console.log("Expected redirect URL:", redirectUrl);
       
