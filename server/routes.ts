@@ -30,7 +30,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/google", async (req: Request, res: Response) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
-    const host = req.get("x-forwarded-host") || req.get("host");
+    let host = req.get("x-forwarded-host") || req.get("host") || "";
+    
+    if (!host.includes(":")) {
+      host = `${host}:5000`;
+    }
     const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
     
     const appRedirectUri = req.query.app_redirect_uri as string || "wolfpackd2d://auth/callback";
