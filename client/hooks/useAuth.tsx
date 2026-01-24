@@ -115,11 +115,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     try {
       const baseUrl = getApiUrl();
-      // Use the HTTPS redirect URL that works better with Safari -> Expo Go
-      const redirectUrl = `${baseUrl}auth/callback`;
+      // Use portless URL for redirect detection (Replit proxy strips ports)
+      const baseUrlObj = new URL(baseUrl);
+      const portlessBaseUrl = `${baseUrlObj.protocol}//${baseUrlObj.hostname}/`;
+      const redirectUrl = `${portlessBaseUrl}auth/callback`;
       console.log("Expected redirect URL:", redirectUrl);
       
-      const authUrl = `${baseUrl}api/auth/google?app_redirect_uri=${encodeURIComponent(redirectUrl)}`;
+      // But send the full URL with port to the server so it can redirect correctly
+      const serverRedirectUrl = `${baseUrl}auth/callback`;
+      const authUrl = `${baseUrl}api/auth/google?app_redirect_uri=${encodeURIComponent(serverRedirectUrl)}`;
       console.log("Auth URL:", authUrl);
       
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
@@ -133,8 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log("Token extracted from auth session");
           await setAuthToken(token);
           await refreshUser();
+          return;
         }
       }
+      
+      // If session detection didn't work (cancel/dismiss), try refreshing anyway
+      console.log("Trying to refresh user after browser closed...");
+      await refreshUser();
     } catch (error) {
       console.error("Google sign in failed:", error);
     }
