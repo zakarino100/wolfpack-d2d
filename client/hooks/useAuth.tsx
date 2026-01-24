@@ -68,9 +68,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleDeepLink = async (event: { url: string }) => {
       console.log("Deep link received:", event.url);
-      const url = new URL(event.url);
-      const token = url.searchParams.get("token");
-      const error = url.searchParams.get("error");
+      
+      // Parse token from URL - handle both standard and exp:// URLs
+      let token: string | null = null;
+      let error: string | null = null;
+      
+      try {
+        // Try extracting from query string directly
+        const queryMatch = event.url.match(/[?&]token=([^&]+)/);
+        if (queryMatch) {
+          token = decodeURIComponent(queryMatch[1]);
+        }
+        const errorMatch = event.url.match(/[?&]error=([^&]+)/);
+        if (errorMatch) {
+          error = decodeURIComponent(errorMatch[1]);
+        }
+      } catch (e) {
+        console.error("Failed to parse deep link URL:", e);
+      }
       
       if (error) {
         console.error("Auth error:", error);
