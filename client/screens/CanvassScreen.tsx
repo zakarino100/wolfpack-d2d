@@ -58,6 +58,8 @@ import { addPendingSync, getPendingSyncs, removePendingSync } from "@/lib/storag
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
+type CanvassMode = "view" | "add_lead";
+
 const OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
   { value: "no_answer", label: "No Answer" },
   { value: "contacted", label: "Contacted" },
@@ -93,6 +95,7 @@ export default function CanvassScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [services, setServices] = useState<Service[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [canvassMode, setCanvassMode] = useState<CanvassMode>("view");
 
   const [outcome, setOutcome] = useState<TouchOutcome | null>(null);
   const [homeownerName, setHomeownerName] = useState("");
@@ -221,9 +224,12 @@ export default function CanvassScreen() {
   };
 
   const handleMapPress = async (e: { nativeEvent: { coordinate: { latitude: number; longitude: number } } }) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (canvassMode !== "add_lead") return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const { latitude, longitude } = e.nativeEvent.coordinate;
     setSelectedLocation({ latitude, longitude });
+    setCanvassMode("view");
 
     const addressData = await reverseGeocode(latitude, longitude);
     if (addressData) {
@@ -237,6 +243,16 @@ export default function CanvassScreen() {
         setServicesInterested(existing.services_interested || []);
       }
       setShowForm(true);
+    }
+  };
+
+  const handleAddLeadPress = () => {
+    if (canvassMode === "add_lead") {
+      setCanvassMode("view");
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } else {
+      setCanvassMode("add_lead");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   };
 
@@ -484,6 +500,41 @@ export default function CanvassScreen() {
         <SyncBadge onSync={syncPending} />
       </View>
 
+      {canvassMode === "add_lead" ? (
+        <Animated.View
+          entering={FadeInUp.springify()}
+          style={[styles.modeIndicator, { backgroundColor: theme.primary }]}
+        >
+          <Feather name="map-pin" size={16} color="white" />
+          <ThemedText type="body" style={{ color: "white", fontWeight: "600", marginLeft: Spacing.xs }}>
+            Tap on the map to drop a pin
+          </ThemedText>
+        </Animated.View>
+      ) : null}
+
+      <Pressable
+        onPress={handleAddLeadPress}
+        style={[
+          styles.addLeadBtn,
+          { 
+            backgroundColor: canvassMode === "add_lead" ? theme.error : theme.primary,
+            bottom: insets.bottom + Spacing.xl + (showForm ? SCREEN_HEIGHT * 0.4 : 60),
+          },
+          Shadows.lg,
+        ]}
+      >
+        <Feather 
+          name={canvassMode === "add_lead" ? "x" : "plus"} 
+          size={24} 
+          color="white" 
+        />
+        {canvassMode !== "add_lead" ? (
+          <ThemedText type="body" style={{ color: "white", fontWeight: "600", marginLeft: Spacing.sm }}>
+            Add Lead
+          </ThemedText>
+        ) : null}
+      </Pressable>
+
       {showForm && address ? (
         <Animated.View
           entering={SlideInDown.springify().damping(20)}
@@ -520,6 +571,13 @@ export default function CanvassScreen() {
                   </ThemedText>
                 </View>
               )}
+            </View>
+
+            <View style={[styles.repInfo, { backgroundColor: `${theme.primary}10`, borderColor: `${theme.primary}30` }]}>
+              <Feather name="user" size={14} color={theme.primary} />
+              <ThemedText type="small" style={{ color: theme.primary, marginLeft: Spacing.xs }}>
+                {existingLead ? "Updating as" : "Creating as"}: {user?.name || user?.email || "Unknown"}
+              </ThemedText>
             </View>
 
             <FormSelect
@@ -628,7 +686,7 @@ export default function CanvassScreen() {
       ) : (
         <View style={[styles.hint, { bottom: insets.bottom + Spacing.xl }]}>
           <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center" }}>
-            Tap on the map or search an address to start
+            Tap "Add Lead" to drop a pin, or tap an existing pin
           </ThemedText>
         </View>
       )}
@@ -736,5 +794,35 @@ const styles = StyleSheet.create({
     left: Spacing.xl,
     right: Spacing.xl,
     alignItems: "center",
+  },
+  modeIndicator: {
+    position: "absolute",
+    top: 120,
+    left: Spacing.lg,
+    right: Spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  addLeadBtn: {
+    position: "absolute",
+    right: Spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.full,
+  },
+  repInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.lg,
   },
 });
