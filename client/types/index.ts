@@ -17,6 +17,8 @@ export interface Lead {
   tags: string[] | null;
   status: LeadStatus;
   assigned_rep_email: string | null;
+  created_by: string | null;
+  pin_id: string | null;
   last_touch_at: string | null;
   next_followup_at: string | null;
   followup_channel: FollowupChannel | null;
@@ -140,4 +142,21 @@ export interface PendingSync {
   payload: unknown;
   created_at: string;
   retries: number;
+}
+
+export interface Pin {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  title: string | null;
+  notes: string | null;
+  address_line1: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  latitude: number;
+  longitude: number;
+  created_by: string;
+  business_unit: string;
+  lead?: Lead | null;
 }
