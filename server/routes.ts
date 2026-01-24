@@ -73,7 +73,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
-      const host = req.get("x-forwarded-host") || req.get("host");
+      let host = req.get("x-forwarded-host") || req.get("host") || "";
+      
+      if (!host.includes(":")) {
+        host = `${host}:5000`;
+      }
       const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
       console.log("Callback redirectUri:", redirectUri);
 
@@ -90,9 +94,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const tokenData = await tokenResponse.json();
+      console.log("Token response status:", tokenResponse.status);
 
       if (!tokenData.access_token) {
-        return res.status(400).json({ error: "Failed to get access token" });
+        console.error("Token exchange failed:", JSON.stringify(tokenData));
+        return res.status(400).json({ error: "Failed to get access token", details: tokenData });
       }
 
       const userInfoResponse = await fetch(
