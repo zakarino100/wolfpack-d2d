@@ -10,6 +10,9 @@ import {
   Alert,
   Switch,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import * as Location from "expo-location";
 import { MapViewWrapper, MapMarker } from "@/components/MapViewWrapper";
 import * as ImagePicker from "expo-image-picker";
@@ -78,9 +81,12 @@ const DEFAULT_REGION: Region = {
   longitudeDelta: 0.01,
 };
 
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
 export default function CanvassScreen() {
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
+  const navigation = useNavigation<NavigationProp>();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<any>(null);
 
@@ -97,6 +103,7 @@ export default function CanvassScreen() {
   const [services, setServices] = useState<Service[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [canvassMode, setCanvassMode] = useState<CanvassMode>("view");
+  const [previewLead, setPreviewLead] = useState<Lead | null>(null);
 
   const [createLead, setCreateLead] = useState(true);
   const [outcome, setOutcome] = useState<TouchOutcome | null>(null);
@@ -226,6 +233,12 @@ export default function CanvassScreen() {
   };
 
   const handleMapPress = async (e: { nativeEvent: { coordinate: { latitude: number; longitude: number } } }) => {
+    // Dismiss preview card when tapping on map
+    if (previewLead) {
+      setPreviewLead(null);
+      return;
+    }
+    
     if (canvassMode !== "add_pin") return;
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -508,21 +521,8 @@ export default function CanvassScreen() {
               coordinate={{ latitude: lead.latitude, longitude: lead.longitude }}
               pinColor={getMarkerColor(lead.status)}
               onPress={() => {
-                setSelectedLocation({ latitude: lead.latitude!, longitude: lead.longitude! });
-                setAddress({
-                  address_line1: lead.address_line1,
-                  city: lead.city || "",
-                  state: lead.state || "",
-                  zip: lead.zip || "",
-                  latitude: lead.latitude!,
-                  longitude: lead.longitude!,
-                });
-                setExistingLead(lead);
-                setHomeownerName(lead.homeowner_name || "");
-                setPhone(lead.phone || "");
-                setEmail(lead.email || "");
-                setServicesInterested(lead.services_interested || []);
-                setShowForm(true);
+                setPreviewLead(lead);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
             />
           ) : null
@@ -592,6 +592,69 @@ export default function CanvassScreen() {
           </ThemedText>
         ) : null}
       </Pressable>
+
+      {previewLead ? (
+        <Animated.View
+          entering={SlideInDown.springify().damping(20)}
+          style={[
+            styles.previewCard,
+            { backgroundColor: theme.backgroundRoot },
+            Shadows.lg,
+          ]}
+        >
+          <Pressable
+            style={styles.previewContent}
+            onPress={() => {
+              setPreviewLead(null);
+              navigation.navigate("LeadDetail", { leadId: previewLead.id });
+            }}
+          >
+            <View style={styles.previewHeader}>
+              <View style={styles.previewInfo}>
+                <ThemedText type="h4" numberOfLines={1}>
+                  {previewLead.address_line1}
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 2 }}>
+                  {[previewLead.city, previewLead.state, previewLead.zip].filter(Boolean).join(", ")}
+                </ThemedText>
+              </View>
+              <StatusBadge status={previewLead.status} />
+            </View>
+
+            {previewLead.homeowner_name ? (
+              <View style={[styles.previewRow, { borderTopColor: theme.borderLight }]}>
+                <Feather name="user" size={14} color={theme.textSecondary} />
+                <ThemedText type="body" style={{ marginLeft: Spacing.sm }}>
+                  {previewLead.homeowner_name}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {previewLead.phone ? (
+              <View style={styles.previewRow}>
+                <Feather name="phone" size={14} color={theme.textSecondary} />
+                <ThemedText type="body" style={{ marginLeft: Spacing.sm }}>
+                  {previewLead.phone}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            <View style={[styles.previewFooter, { borderTopColor: theme.borderLight }]}>
+              <ThemedText type="small" style={{ color: theme.primary, fontWeight: "600" }}>
+                Tap to view details
+              </ThemedText>
+              <Feather name="chevron-right" size={16} color={theme.primary} />
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={[styles.previewClose, { backgroundColor: theme.backgroundSecondary }]}
+            onPress={() => setPreviewLead(null)}
+          >
+            <Feather name="x" size={18} color={theme.textSecondary} />
+          </Pressable>
+        </Animated.View>
+      ) : null}
 
       {showForm && address ? (
         <Animated.View
@@ -925,5 +988,52 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+  },
+  previewCard: {
+    position: "absolute",
+    left: Spacing.lg,
+    right: Spacing.lg,
+    bottom: 100,
+    borderRadius: BorderRadius.lg,
+    overflow: "hidden",
+  },
+  previewContent: {
+    padding: Spacing.md,
+  },
+  previewHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: Spacing.sm,
+  },
+  previewInfo: {
+    flex: 1,
+    marginRight: Spacing.md,
+  },
+  previewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: Spacing.sm,
+    marginTop: Spacing.xs,
+    borderTopWidth: 1,
+  },
+  previewFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: Spacing.md,
+    marginTop: Spacing.sm,
+    borderTopWidth: 1,
+    gap: Spacing.xs,
+  },
+  previewClose: {
+    position: "absolute",
+    top: Spacing.sm,
+    right: Spacing.sm,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
