@@ -558,21 +558,36 @@ export default function CanvassScreen() {
     }
   };
 
-  const getMarkerColor = (status: string) => {
+  const getMarkerConfig = (status: string): { color: string; icon: string } => {
     switch (status) {
       case "new":
-        return theme.statusNew;
+        return { color: theme.statusNew, icon: "plus-circle" };
+      case "no_answer":
+        return { color: theme.statusContacted, icon: "minus-circle" };
+      case "contacted":
+        return { color: theme.statusContacted, icon: "phone" };
       case "interested":
-        return theme.statusInterested;
+        return { color: theme.statusInterested, icon: "star" };
       case "quoted":
-        return theme.statusQuoted;
+        return { color: theme.statusQuoted, icon: "file-text" };
       case "booked":
-        return theme.statusBooked;
+        return { color: "#34C759", icon: "check-circle" };
+      case "not_interested":
+        return { color: "#FF3B30", icon: "x-circle" };
       case "do_not_knock":
-        return theme.statusDoNotKnock;
+        return { color: theme.statusDoNotKnock, icon: "slash" };
       default:
-        return theme.statusContacted;
+        return { color: theme.statusContacted, icon: "map-pin" };
     }
+  };
+
+  const CustomMarker = ({ status }: { status: string }) => {
+    const config = getMarkerConfig(status);
+    return (
+      <View style={[markerStyles.container, { backgroundColor: config.color }]}>
+        <Feather name={config.icon as any} size={14} color="#FFFFFF" />
+      </View>
+    );
   };
 
   return (
@@ -600,14 +615,16 @@ export default function CanvassScreen() {
             <MapMarker
               key={lead.id}
               coordinate={{ latitude: lead.latitude, longitude: lead.longitude }}
-              pinColor={getMarkerColor(lead.status)}
               onPress={(e: any) => {
                 e?.stopPropagation?.();
                 markerPressedRef.current = true;
                 setPreviewLead(lead);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
-            />
+              tracksViewChanges={false}
+            >
+              <CustomMarker status={lead.status} />
+            </MapMarker>
           ) : null
         )}
       </MapViewWrapper>
@@ -693,6 +710,9 @@ export default function CanvassScreen() {
             }}
           >
             <View style={styles.previewHeader}>
+              <View style={{ marginRight: Spacing.sm }}>
+                <CustomMarker status={previewLead.status} />
+              </View>
               <View style={styles.previewInfo}>
                 <ThemedText type="h4" numberOfLines={1}>
                   {previewLead.address_line1}
@@ -1092,5 +1112,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+  },
+});
+
+const markerStyles = StyleSheet.create({
+  container: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
   },
 });
