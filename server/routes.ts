@@ -681,6 +681,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/geocode/reverse", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { lat, lng } = req.query;
+      if (!lat || !lng) {
+        return res.status(400).json({ error: "lat and lng are required" });
+      }
+
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Geocoding not configured" });
+      }
+
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
+      );
+      const data = await response.json();
+
+      if (data.results && data.results.length > 0) {
+        const result = data.results[0];
+        const components = result.address_components || [];
+        const getComponent = (type: string) =>
+          components.find((c: { types: string[] }) => c.types.includes(type))?.long_name || "";
+
+        res.json({
+          address_line1: `${getComponent("street_number")} ${getComponent("route")}`.trim() || "Unknown Address",
+          city: getComponent("locality") || getComponent("sublocality"),
+          state: getComponent("administrative_area_level_1"),
+          zip: getComponent("postal_code"),
+          latitude: parseFloat(lat as string),
+          longitude: parseFloat(lng as string),
+          formatted_address: result.formatted_address,
+        });
+      } else {
+        res.status(404).json({ error: "No address found" });
+      }
+    } catch (error) {
+      console.error("Reverse geocode error:", error);
+      res.status(500).json({ error: "Geocoding failed" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

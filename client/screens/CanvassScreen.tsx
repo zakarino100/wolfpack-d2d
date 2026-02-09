@@ -99,6 +99,7 @@ export default function CanvassScreen() {
   const [existingLead, setExistingLead] = useState<Lead | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [services, setServices] = useState<Service[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -185,14 +186,65 @@ export default function CanvassScreen() {
   };
 
   const reverseGeocode = async (lat: number, lng: number): Promise<AddressData | null> => {
+    // Try server-side geocoding first (most reliable, uses server API key)
+    try {
+      const serverResponse = await apiRequest("GET", `/api/geocode/reverse?lat=${lat}&lng=${lng}`);
+      if (serverResponse.ok) {
+        const data = await serverResponse.json();
+        if (data.address_line1 && data.address_line1 !== "Unknown Address") {
+          return {
+            address_line1: data.address_line1,
+            city: data.city || "",
+            state: data.state || "",
+            zip: data.zip || "",
+            latitude: lat,
+            longitude: lng,
+          };
+        }
+      }
+    } catch {
+      // Server geocoding failed, try client-side fallbacks
+    }
+
+    // Client-side fallback: Google Maps API
     try {
       const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-      if (!apiKey) {
-        const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-        if (results.length > 0) {
-          const r = results[0];
+      if (apiKey) {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
+        );
+        const data = await response.json();
+        if (data.results && data.results.length > 0) {
+          const result = data.results[0];
+          const components = result.address_components || [];
+          const getComponent = (type: string) =>
+            components.find((c: { types: string[] }) => c.types.includes(type))?.long_name || "";
+          const addr = `${getComponent("street_number")} ${getComponent("route")}`.trim();
+          if (addr) {
+            return {
+              address_line1: addr,
+              city: getComponent("locality") || getComponent("sublocality"),
+              state: getComponent("administrative_area_level_1"),
+              zip: getComponent("postal_code"),
+              latitude: lat,
+              longitude: lng,
+            };
+          }
+        }
+      }
+    } catch {
+      // Google Maps API failed
+    }
+
+    // Last resort: Expo Location geocoding
+    try {
+      const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+      if (results.length > 0) {
+        const r = results[0];
+        const streetAddr = [r.streetNumber, r.street].filter(Boolean).join(" ");
+        if (streetAddr) {
           return {
-            address_line1: [r.streetNumber, r.street].filter(Boolean).join(" ") || "Unknown Address",
+            address_line1: streetAddr,
             city: r.city || "",
             state: r.region || "",
             zip: r.postalCode || "",
@@ -200,34 +252,12 @@ export default function CanvassScreen() {
             longitude: lng,
           };
         }
-        return null;
       }
-
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
-      );
-      const data = await response.json();
-
-      if (data.results && data.results.length > 0) {
-        const result = data.results[0];
-        const components = result.address_components || [];
-
-        const getComponent = (type: string) =>
-          components.find((c: { types: string[] }) => c.types.includes(type))?.long_name || "";
-
-        return {
-          address_line1: `${getComponent("street_number")} ${getComponent("route")}`.trim() || "Unknown Address",
-          city: getComponent("locality") || getComponent("sublocality"),
-          state: getComponent("administrative_area_level_1"),
-          zip: getComponent("postal_code"),
-          latitude: lat,
-          longitude: lng,
-        };
-      }
-      return null;
     } catch {
-      return null;
+      // All geocoding failed
     }
+
+    return null;
   };
 
   const checkExistingLead = async (addressData: AddressData): Promise<Lead | null> => {
@@ -269,6 +299,18 @@ export default function CanvassScreen() {
     setSelectedLocation({ latitude, longitude });
     setCanvassMode("view");
 
+    // Show form immediately with loading state
+    setAddress({
+      address_line1: "Looking up address...",
+      city: "",
+      state: "",
+      zip: "",
+      latitude,
+      longitude,
+    });
+    setShowForm(true);
+    setGeocoding(true);
+
     const addressData = await reverseGeocode(latitude, longitude);
     const finalAddress = addressData || {
       address_line1: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
@@ -279,6 +321,8 @@ export default function CanvassScreen() {
       longitude,
     };
     setAddress(finalAddress);
+    setGeocoding(false);
+
     const existing = await checkExistingLead(finalAddress);
     setExistingLead(existing);
     if (existing) {
@@ -287,7 +331,6 @@ export default function CanvassScreen() {
       setEmail(existing.email || "");
       setServicesInterested(existing.services_interested || []);
     }
-    setShowForm(true);
   };
 
   const handleAddPinPress = () => {
