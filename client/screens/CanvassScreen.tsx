@@ -104,6 +104,7 @@ export default function CanvassScreen() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [canvassMode, setCanvassMode] = useState<CanvassMode>("view");
   const [previewLead, setPreviewLead] = useState<Lead | null>(null);
+  const markerPressedRef = useRef(false);
 
   const [createLead, setCreateLead] = useState(true);
   const [outcome, setOutcome] = useState<TouchOutcome | null>(null);
@@ -155,15 +156,31 @@ export default function CanvassScreen() {
   const requestLocationPermission = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status === "granted") {
-      const location = await Location.getCurrentPositionAsync({});
-      const newRegion = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      };
-      setRegion(newRegion);
-      mapRef.current?.animateToRegion(newRegion, 500);
+      try {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const newRegion = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        };
+        setRegion(newRegion);
+        mapRef.current?.animateToRegion(newRegion, 500);
+      } catch {
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (lastKnown) {
+          const newRegion = {
+            latitude: lastKnown.coords.latitude,
+            longitude: lastKnown.coords.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          };
+          setRegion(newRegion);
+          mapRef.current?.animateToRegion(newRegion, 500);
+        }
+      }
     }
   };
 
@@ -233,6 +250,12 @@ export default function CanvassScreen() {
   };
 
   const handleMapPress = async (e: { nativeEvent: { coordinate: { latitude: number; longitude: number } } }) => {
+    // If a marker was just pressed, skip map press to prevent dismissing preview
+    if (markerPressedRef.current) {
+      markerPressedRef.current = false;
+      return;
+    }
+
     // Dismiss preview card when tapping on map
     if (previewLead) {
       setPreviewLead(null);
@@ -247,18 +270,24 @@ export default function CanvassScreen() {
     setCanvassMode("view");
 
     const addressData = await reverseGeocode(latitude, longitude);
-    if (addressData) {
-      setAddress(addressData);
-      const existing = await checkExistingLead(addressData);
-      setExistingLead(existing);
-      if (existing) {
-        setHomeownerName(existing.homeowner_name || "");
-        setPhone(existing.phone || "");
-        setEmail(existing.email || "");
-        setServicesInterested(existing.services_interested || []);
-      }
-      setShowForm(true);
+    const finalAddress = addressData || {
+      address_line1: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+      city: "",
+      state: "",
+      zip: "",
+      latitude,
+      longitude,
+    };
+    setAddress(finalAddress);
+    const existing = await checkExistingLead(finalAddress);
+    setExistingLead(existing);
+    if (existing) {
+      setHomeownerName(existing.homeowner_name || "");
+      setPhone(existing.phone || "");
+      setEmail(existing.email || "");
+      setServicesInterested(existing.services_interested || []);
     }
+    setShowForm(true);
   };
 
   const handleAddPinPress = () => {
@@ -311,18 +340,39 @@ export default function CanvassScreen() {
   const handleUseMyLocation = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      const location = await Location.getCurrentPositionAsync({});
-      const { latitude, longitude } = location.coords;
-      const newRegion = {
-        latitude,
-        longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      };
-      setRegion(newRegion);
-      mapRef.current?.animateToRegion(newRegion, 500);
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== "granted") {
+        const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+        if (newStatus !== "granted") {
+          Alert.alert("Permission Needed", "Please enable location access in your device settings.");
+          return;
+        }
+      }
+
+      let location: Location.LocationObject | null = null;
+      try {
+        location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+      } catch {
+        location = await Location.getLastKnownPositionAsync();
+      }
+
+      if (location) {
+        const { latitude, longitude } = location.coords;
+        const newRegion = {
+          latitude,
+          longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        };
+        setRegion(newRegion);
+        mapRef.current?.animateToRegion(newRegion, 500);
+      } else {
+        Alert.alert("Location Unavailable", "Could not determine your location. Please try again.");
+      }
     } catch {
-      Alert.alert("Error", "Could not get your location");
+      Alert.alert("Location Error", "Could not get your location. Make sure location services are enabled.");
     }
   };
 
@@ -520,7 +570,9 @@ export default function CanvassScreen() {
               key={lead.id}
               coordinate={{ latitude: lead.latitude, longitude: lead.longitude }}
               pinColor={getMarkerColor(lead.status)}
-              onPress={() => {
+              onPress={(e: any) => {
+                e?.stopPropagation?.();
+                markerPressedRef.current = true;
                 setPreviewLead(lead);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
