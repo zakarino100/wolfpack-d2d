@@ -646,10 +646,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = (req as any).user as UserPayload;
       const { pin: pinData, lead: leadData, touch, quote } = req.body;
 
+      const leadStatus = touch?.outcome || "new";
       const result = await createLeadWithPin(
         {
           pin: { ...pinData, created_by: user.email },
-          lead: leadData || null,
+          lead: leadData ? { ...leadData, status: leadStatus } : null,
         },
         user.email
       );
