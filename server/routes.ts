@@ -644,12 +644,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/pins/create-with-lead", authMiddleware, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user as UserPayload;
-      const { pin: pinData, lead: leadData, createLead } = req.body;
+      const { pin: pinData, lead: leadData, touch, quote } = req.body;
 
       const result = await createLeadWithPin(
         {
           pin: { ...pinData, created_by: user.email },
-          lead: createLead ? leadData : null,
+          lead: leadData || null,
         },
         user.email
       );
@@ -663,6 +663,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         details: { pin_id: result.pin.id },
         actor: user.email,
       });
+
+      if (result.lead && touch) {
+        const touchData = await createTouch({
+          ...touch,
+          lead_id: result.lead.id,
+          rep_email: user.email,
+        });
+
+        await logActivity({
+          activity_type: "d2d_touch_created",
+          lead_id: result.lead.id,
+          title: `${touch.touch_type} - ${touch.outcome}`,
+          details: { touch_id: touchData.id, notes: touch.notes },
+          actor: user.email,
+        });
+
+        if (quote && quote.quote_line_items?.length > 0) {
+          await createQuote({
+            ...quote,
+            lead_id: result.lead.id,
+            rep_email: user.email,
+          });
+        }
+      }
 
       res.json(result);
     } catch (error) {

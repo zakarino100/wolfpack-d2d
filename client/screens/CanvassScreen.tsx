@@ -8,7 +8,6 @@ import {
   Dimensions,
   ScrollView,
   Alert,
-  Switch,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -107,7 +106,6 @@ export default function CanvassScreen() {
   const [previewLead, setPreviewLead] = useState<Lead | null>(null);
   const markerPressedRef = useRef(false);
 
-  const [createLead, setCreateLead] = useState(true);
   const [outcome, setOutcome] = useState<TouchOutcome | null>(null);
   const [homeownerName, setHomeownerName] = useState("");
   const [phone, setPhone] = useState("");
@@ -420,7 +418,6 @@ export default function CanvassScreen() {
   };
 
   const resetForm = () => {
-    setCreateLead(true);
     setOutcome(null);
     setHomeownerName("");
     setPhone("");
@@ -435,7 +432,7 @@ export default function CanvassScreen() {
   };
 
   const handleSave = async () => {
-    if (createLead && !outcome) {
+    if (!outcome) {
       Alert.alert("Error", "Please select an outcome");
       return;
     }
@@ -448,55 +445,9 @@ export default function CanvassScreen() {
     setSaving(true);
 
     try {
-      if (createLead) {
-        const payload = {
-          client_generated_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          lead: {
-            address_line1: address.address_line1,
-            city: address.city,
-            state: address.state,
-            zip: address.zip,
-            latitude: address.latitude,
-            longitude: address.longitude,
-            homeowner_name: homeownerName || null,
-            phone: phone || null,
-            email: email || null,
-            services_interested: servicesInterested.length > 0 ? servicesInterested : null,
-          },
-          touch: {
-            touch_type: "knock" as const,
-            outcome,
-            notes: notes || null,
-            next_followup_at: followupDate?.toISOString() || null,
-            followup_channel: followupChannel,
-            followup_priority: followupPriority,
-          },
-          quote:
-            quoteLineItems.length > 0
-              ? {
-                  quote_line_items: quoteLineItems,
-                  quote_amount: quoteLineItems.reduce((sum, item) => sum + item.price, 0),
-                }
-              : null,
-        };
-
-        await apiRequest("POST", "/api/touches/create", payload);
-        Alert.alert("Saved!", "Lead and touch logged successfully", [
-          {
-            text: "Next House",
-            onPress: () => {
-              resetForm();
-              setShowForm(false);
-              setSelectedLocation(null);
-              setAddress(null);
-              loadLeads();
-            },
-          },
-          { text: "Stay Here", style: "cancel" },
-        ]);
-      } else {
-        const pinPayload = {
-          title: notes || null,
+      const payload = {
+        pin: {
+          title: address.address_line1,
           notes: notes || null,
           address_line1: address.address_line1,
           city: address.city,
@@ -504,54 +455,79 @@ export default function CanvassScreen() {
           zip: address.zip,
           latitude: address.latitude,
           longitude: address.longitude,
-        };
+        },
+        lead: {
+          address_line1: address.address_line1,
+          city: address.city,
+          state: address.state,
+          zip: address.zip,
+          latitude: address.latitude,
+          longitude: address.longitude,
+          homeowner_name: homeownerName || null,
+          phone: phone || null,
+          email: email || null,
+          services_interested: servicesInterested.length > 0 ? servicesInterested : null,
+        },
+        touch: {
+          touch_type: "knock" as const,
+          outcome,
+          notes: notes || null,
+          next_followup_at: followupDate?.toISOString() || null,
+          followup_channel: followupChannel,
+          followup_priority: followupPriority,
+        },
+        quote:
+          quoteLineItems.length > 0
+            ? {
+                quote_line_items: quoteLineItems,
+                quote_amount: quoteLineItems.reduce((sum, item) => sum + item.price, 0),
+              }
+            : null,
+      };
 
-        await apiRequest("POST", "/api/pins/create", pinPayload);
-        Alert.alert("Saved!", "Pin created successfully", [
-          {
-            text: "Next House",
-            onPress: () => {
-              resetForm();
-              setShowForm(false);
-              setSelectedLocation(null);
-              setAddress(null);
-              loadLeads();
-            },
+      await apiRequest("POST", "/api/pins/create-with-lead", payload);
+      Alert.alert("Saved!", "Pin and lead created successfully", [
+        {
+          text: "Next House",
+          onPress: () => {
+            resetForm();
+            setShowForm(false);
+            setSelectedLocation(null);
+            setAddress(null);
+            loadLeads();
           },
-          { text: "Stay Here", style: "cancel" },
-        ]);
-      }
+        },
+        { text: "Stay Here", style: "cancel" },
+      ]);
     } catch (error) {
-      if (createLead) {
-        const payload = {
-          client_generated_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          lead: {
-            address_line1: address.address_line1,
-            city: address.city,
-            state: address.state,
-            zip: address.zip,
-            latitude: address.latitude,
-            longitude: address.longitude,
-            homeowner_name: homeownerName || null,
-            phone: phone || null,
-            email: email || null,
-            services_interested: servicesInterested.length > 0 ? servicesInterested : null,
-          },
-          touch: {
-            touch_type: "knock" as const,
-            outcome,
-            notes: notes || null,
-          },
-          quote: null,
-        };
-        await addPendingSync({
-          id: payload.client_generated_id,
-          type: "touch",
-          payload,
-          created_at: new Date().toISOString(),
-          retries: 0,
-        });
-      }
+      const offlinePayload = {
+        client_generated_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        lead: {
+          address_line1: address.address_line1,
+          city: address.city,
+          state: address.state,
+          zip: address.zip,
+          latitude: address.latitude,
+          longitude: address.longitude,
+          homeowner_name: homeownerName || null,
+          phone: phone || null,
+          email: email || null,
+          services_interested: servicesInterested.length > 0 ? servicesInterested : null,
+        },
+        touch: {
+          touch_type: "knock" as const,
+          outcome,
+          notes: notes || null,
+        },
+        quote: null,
+      };
+      await addPendingSync({
+        id: offlinePayload.client_generated_id,
+        type: "touch",
+        payload: offlinePayload,
+        created_at: new Date().toISOString(),
+        retries: 0,
+      });
       Alert.alert("Offline", "Saved locally. Will sync when online.");
     } finally {
       setSaving(false);
@@ -796,39 +772,14 @@ export default function CanvassScreen() {
               </ThemedText>
             </View>
 
-            {!existingLead ? (
-              <View style={[styles.toggleRow, { borderColor: theme.borderLight }]}>
-                <View style={styles.toggleInfo}>
-                  <Feather name="user-plus" size={18} color={createLead ? theme.primary : theme.textSecondary} />
-                  <View style={{ marginLeft: Spacing.sm }}>
-                    <ThemedText type="body" style={{ fontWeight: "600" }}>
-                      Create Lead
-                    </ThemedText>
-                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                      {createLead ? "Pin will be linked to a new lead" : "Just dropping a pin for later"}
-                    </ThemedText>
-                  </View>
-                </View>
-                <Switch
-                  value={createLead}
-                  onValueChange={setCreateLead}
-                  trackColor={{ false: theme.borderLight, true: `${theme.primary}60` }}
-                  thumbColor={createLead ? theme.primary : "#f4f3f4"}
-                />
-              </View>
-            ) : null}
+            <FormSelect
+              label="Outcome *"
+              value={outcome}
+              options={OUTCOME_OPTIONS}
+              onChange={setOutcome}
+            />
 
-            {createLead ? (
-              <FormSelect
-                label="Outcome *"
-                value={outcome}
-                options={OUTCOME_OPTIONS}
-                onChange={setOutcome}
-              />
-            ) : null}
-
-            {createLead ? (
-              <>
+            <>
                 <FormInput
                   label="Homeowner Name"
                   value={homeownerName}
@@ -876,7 +827,6 @@ export default function CanvassScreen() {
                   onPriorityChange={setFollowupPriority}
                 />
               </>
-            ) : null}
 
             <FormInput
               label="Notes"
@@ -891,10 +841,10 @@ export default function CanvassScreen() {
             <View style={styles.formActions}>
               <Button
                 onPress={handleSave}
-                disabled={saving || (createLead && !outcome)}
+                disabled={saving || !outcome}
                 style={styles.saveBtn}
               >
-                {saving ? "Saving..." : createLead ? "Save Lead" : "Save Pin"}
+                {saving ? "Saving..." : "Save Lead"}
               </Button>
 
               <Pressable
