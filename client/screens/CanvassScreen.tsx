@@ -433,11 +433,23 @@ export default function CanvassScreen() {
 
   const handleSave = async () => {
     if (!outcome) {
-      Alert.alert("Error", "Please select an outcome");
+      Alert.alert("Missing Info", "Please select a status/outcome");
       return;
     }
     if (!address) {
-      Alert.alert("Error", "No address available");
+      Alert.alert("Missing Info", "No address available");
+      return;
+    }
+    if (!homeownerName.trim()) {
+      Alert.alert("Missing Info", "Please enter the homeowner's name");
+      return;
+    }
+    if (servicesInterested.length === 0) {
+      Alert.alert("Missing Info", "Please select at least one service");
+      return;
+    }
+    if ((outcome === "quoted" || outcome === "booked") && quoteLineItems.length === 0) {
+      Alert.alert("Missing Info", "Please add a quote with pricing for quoted/booked leads");
       return;
     }
 
@@ -781,7 +793,7 @@ export default function CanvassScreen() {
 
             <>
                 <FormInput
-                  label="Homeowner Name"
+                  label="Homeowner Name *"
                   value={homeownerName}
                   onChangeText={setHomeownerName}
                   placeholder="John Smith"
@@ -841,7 +853,7 @@ export default function CanvassScreen() {
             <View style={styles.formActions}>
               <Button
                 onPress={handleSave}
-                disabled={saving || !outcome}
+                disabled={saving || !outcome || !homeownerName.trim() || servicesInterested.length === 0}
                 style={styles.saveBtn}
               >
                 {saving ? "Saving..." : "Save Lead"}
