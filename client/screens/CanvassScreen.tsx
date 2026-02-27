@@ -498,18 +498,28 @@ export default function CanvassScreen() {
       };
 
       await apiRequest("POST", "/api/pins/create-with-lead", payload);
+
+      loadPins();
+      setSelectedLocation(null);
+
       Alert.alert("Saved!", "Pin saved successfully", [
         {
           text: "Next House",
           onPress: () => {
             resetForm();
             setShowForm(false);
-            setSelectedLocation(null);
             setAddress(null);
-            loadPins();
           },
         },
-        { text: "Stay Here", style: "cancel" },
+        {
+          text: "Stay Here",
+          style: "cancel",
+          onPress: () => {
+            resetForm();
+            setShowForm(false);
+            setAddress(null);
+          },
+        },
       ]);
     } catch (error) {
       const offlinePayload = {
