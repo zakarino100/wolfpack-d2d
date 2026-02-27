@@ -32,8 +32,30 @@ import {
 } from "./lib/crmAdapter";
 import { supabase } from "./lib/supabase";
 
+async function ensurePinStatusColumn() {
+  try {
+    const { error } = await supabase.rpc('exec_sql', { 
+      sql: "ALTER TABLE pins ADD COLUMN IF NOT EXISTS status text DEFAULT 'new'" 
+    });
+    if (error) {
+      // Try direct query approach - the column may already exist
+      const { data, error: testError } = await supabase
+        .from("pins")
+        .select("status")
+        .limit(1);
+      if (testError && testError.message.includes("status")) {
+        console.log("Warning: pins.status column may not exist. Run the migration: ALTER TABLE pins ADD COLUMN status text DEFAULT 'new'");
+      }
+    }
+  } catch {
+    console.log("Note: Could not auto-add pins.status column. If pins don't show status, run: ALTER TABLE pins ADD COLUMN status text DEFAULT 'new'");
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(cookieParser());
+
+  ensurePinStatusColumn();
 
   app.get("/api/auth/google", async (req: Request, res: Response) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;

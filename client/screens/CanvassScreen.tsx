@@ -102,8 +102,9 @@ export default function CanvassScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [services, setServices] = useState<Service[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [pins, setPins] = useState<any[]>([]);
   const [canvassMode, setCanvassMode] = useState<CanvassMode>("view");
-  const [previewLead, setPreviewLead] = useState<Lead | null>(null);
+  const [previewPin, setPreviewPin] = useState<any | null>(null);
   const markerPressedRef = useRef(false);
 
   const [outcome, setOutcome] = useState<TouchOutcome | null>(null);
@@ -121,7 +122,7 @@ export default function CanvassScreen() {
 
   useEffect(() => {
     loadServices();
-    loadLeads();
+    loadPins();
     requestLocationPermission();
   }, []);
 
@@ -149,6 +150,16 @@ export default function CanvassScreen() {
       setLeads(data.leads || []);
     } catch {
       console.log("Could not load leads");
+    }
+  };
+
+  const loadPins = async () => {
+    try {
+      const response = await apiRequest("GET", "/api/pins");
+      const data = await response.json();
+      setPins(data.pins || []);
+    } catch {
+      console.log("Could not load pins");
     }
   };
 
@@ -285,8 +296,8 @@ export default function CanvassScreen() {
     }
 
     // Dismiss preview card when tapping on map
-    if (previewLead) {
-      setPreviewLead(null);
+    if (previewPin) {
+      setPreviewPin(null);
       return;
     }
     
@@ -440,23 +451,13 @@ export default function CanvassScreen() {
       Alert.alert("Missing Info", "No address available");
       return;
     }
-    if (!homeownerName.trim()) {
-      Alert.alert("Missing Info", "Please enter the homeowner's name");
-      return;
-    }
-    if (servicesInterested.length === 0) {
-      Alert.alert("Missing Info", "Please select at least one service");
-      return;
-    }
-    if ((outcome === "quoted" || outcome === "booked") && quoteLineItems.length === 0) {
-      Alert.alert("Missing Info", "Please add a quote with pricing for quoted/booked leads");
-      return;
-    }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
 
     try {
+      const hasLeadData = homeownerName.trim() || phone.trim() || email.trim() || servicesInterested.length > 0;
+
       const payload = {
         pin: {
           title: address.address_line1,
@@ -467,8 +468,9 @@ export default function CanvassScreen() {
           zip: address.zip,
           latitude: address.latitude,
           longitude: address.longitude,
+          status: outcome,
         },
-        lead: {
+        lead: hasLeadData ? {
           address_line1: address.address_line1,
           city: address.city,
           state: address.state,
@@ -479,15 +481,15 @@ export default function CanvassScreen() {
           phone: phone || null,
           email: email || null,
           services_interested: servicesInterested.length > 0 ? servicesInterested : null,
-        },
-        touch: {
+        } : null,
+        touch: hasLeadData ? {
           touch_type: "knock" as const,
           outcome,
           notes: notes || null,
           next_followup_at: followupDate?.toISOString() || null,
           followup_channel: followupChannel,
           followup_priority: followupPriority,
-        },
+        } : null,
         quote:
           quoteLineItems.length > 0
             ? {
@@ -498,7 +500,7 @@ export default function CanvassScreen() {
       };
 
       await apiRequest("POST", "/api/pins/create-with-lead", payload);
-      Alert.alert("Saved!", "Pin and lead created successfully", [
+      Alert.alert("Saved!", "Pin saved successfully", [
         {
           text: "Next House",
           onPress: () => {
@@ -506,7 +508,7 @@ export default function CanvassScreen() {
             setShowForm(false);
             setSelectedLocation(null);
             setAddress(null);
-            loadLeads();
+            loadPins();
           },
         },
         { text: "Stay Here", style: "cancel" },
@@ -610,20 +612,20 @@ export default function CanvassScreen() {
           />
         ) : null}
 
-        {leads.map((lead) =>
-          lead.latitude && lead.longitude ? (
+        {pins.map((pin) =>
+          pin.latitude && pin.longitude ? (
             <MapMarker
-              key={lead.id}
-              coordinate={{ latitude: lead.latitude, longitude: lead.longitude }}
+              key={pin.id}
+              coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
               onPress={(e: any) => {
                 e?.stopPropagation?.();
                 markerPressedRef.current = true;
-                setPreviewLead(lead);
+                setPreviewPin(pin);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
               tracksViewChanges={false}
             >
-              <CustomMarker status={lead.status} />
+              <CustomMarker status={pin.status || pin.lead?.status || "new"} />
             </MapMarker>
           ) : null
         )}
@@ -693,7 +695,7 @@ export default function CanvassScreen() {
         ) : null}
       </Pressable>
 
-      {previewLead ? (
+      {previewPin ? (
         <Animated.View
           entering={SlideInDown.springify().damping(20)}
           style={[
@@ -705,54 +707,67 @@ export default function CanvassScreen() {
           <Pressable
             style={styles.previewContent}
             onPress={() => {
-              setPreviewLead(null);
-              navigation.navigate("LeadDetail", { leadId: previewLead.id });
+              if (previewPin.lead) {
+                setPreviewPin(null);
+                navigation.navigate("LeadDetail", { leadId: previewPin.lead.id });
+              }
             }}
           >
             <View style={styles.previewHeader}>
               <View style={{ marginRight: Spacing.sm }}>
-                <CustomMarker status={previewLead.status} />
+                <CustomMarker status={previewPin.status || previewPin.lead?.status || "new"} />
               </View>
               <View style={styles.previewInfo}>
                 <ThemedText type="h4" numberOfLines={1}>
-                  {previewLead.address_line1}
+                  {previewPin.address_line1 || previewPin.title || "Dropped Pin"}
                 </ThemedText>
                 <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 2 }}>
-                  {[previewLead.city, previewLead.state, previewLead.zip].filter(Boolean).join(", ")}
+                  {[previewPin.city, previewPin.state, previewPin.zip].filter(Boolean).join(", ")}
                 </ThemedText>
               </View>
-              <StatusBadge status={previewLead.status} />
+              <StatusBadge status={previewPin.status || previewPin.lead?.status || "new"} />
             </View>
 
-            {previewLead.homeowner_name ? (
+            {previewPin.lead?.homeowner_name ? (
               <View style={[styles.previewRow, { borderTopColor: theme.borderLight }]}>
                 <Feather name="user" size={14} color={theme.textSecondary} />
                 <ThemedText type="body" style={{ marginLeft: Spacing.sm }}>
-                  {previewLead.homeowner_name}
+                  {previewPin.lead.homeowner_name}
                 </ThemedText>
               </View>
             ) : null}
 
-            {previewLead.phone ? (
+            {previewPin.lead?.phone ? (
               <View style={styles.previewRow}>
                 <Feather name="phone" size={14} color={theme.textSecondary} />
                 <ThemedText type="body" style={{ marginLeft: Spacing.sm }}>
-                  {previewLead.phone}
+                  {previewPin.lead.phone}
                 </ThemedText>
               </View>
             ) : null}
 
-            <View style={[styles.previewFooter, { borderTopColor: theme.borderLight }]}>
-              <ThemedText type="small" style={{ color: theme.primary, fontWeight: "600" }}>
-                Tap to view details
-              </ThemedText>
-              <Feather name="chevron-right" size={16} color={theme.primary} />
-            </View>
+            {previewPin.notes ? (
+              <View style={styles.previewRow}>
+                <Feather name="file-text" size={14} color={theme.textSecondary} />
+                <ThemedText type="body" numberOfLines={2} style={{ marginLeft: Spacing.sm, flex: 1 }}>
+                  {previewPin.notes}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {previewPin.lead ? (
+              <View style={[styles.previewFooter, { borderTopColor: theme.borderLight }]}>
+                <ThemedText type="small" style={{ color: theme.primary, fontWeight: "600" }}>
+                  Tap to view details
+                </ThemedText>
+                <Feather name="chevron-right" size={16} color={theme.primary} />
+              </View>
+            ) : null}
           </Pressable>
 
           <Pressable
             style={[styles.previewClose, { backgroundColor: theme.backgroundSecondary }]}
-            onPress={() => setPreviewLead(null)}
+            onPress={() => setPreviewPin(null)}
           >
             <Feather name="x" size={18} color={theme.textSecondary} />
           </Pressable>
@@ -805,7 +820,7 @@ export default function CanvassScreen() {
             </View>
 
             <FormSelect
-              label="Outcome *"
+              label="Status *"
               value={outcome}
               options={OUTCOME_OPTIONS}
               onChange={setOutcome}
@@ -813,7 +828,7 @@ export default function CanvassScreen() {
 
             <>
                 <FormInput
-                  label="Homeowner Name *"
+                  label="Homeowner Name"
                   value={homeownerName}
                   onChangeText={setHomeownerName}
                   placeholder="John Smith"
@@ -873,10 +888,10 @@ export default function CanvassScreen() {
             <View style={styles.formActions}>
               <Button
                 onPress={handleSave}
-                disabled={saving || !outcome || !homeownerName.trim() || servicesInterested.length === 0}
+                disabled={saving || !outcome}
                 style={styles.saveBtn}
               >
-                {saving ? "Saving..." : "Save Lead"}
+                {saving ? "Saving..." : "Save Pin"}
               </Button>
 
               <Pressable

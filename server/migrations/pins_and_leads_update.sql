@@ -18,6 +18,14 @@ CREATE TABLE IF NOT EXISTS pins (
   business_unit text DEFAULT 'wolfpack_wash'
 );
 
+-- Add status column to pins table if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'pins' AND column_name = 'status') THEN
+    ALTER TABLE pins ADD COLUMN status text DEFAULT 'new';
+  END IF;
+END $$;
+
 -- Add pin_id and created_by to leads table if not exists
 DO $$
 BEGIN

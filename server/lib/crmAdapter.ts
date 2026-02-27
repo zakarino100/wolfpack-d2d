@@ -62,6 +62,7 @@ export interface PinPayload {
   longitude: number;
   created_by: string;
   business_unit?: string;
+  status?: string | null;
 }
 
 export interface CreateLeadWithPinPayload {

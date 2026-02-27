@@ -30,6 +30,7 @@ A mobile-first D2D canvassing app for Wolfpack Wash that integrates with the exi
 
 ## Database Tables
 - `leads` - Customer/prospect records
+- `pins` - Map pins with status, location, optional linked lead (has `status` column)
 - `d2d_touches` - Visit/contact history
 - `d2d_quotes` - Quote snapshots
 - `d2d_media` - Photo/video uploads
