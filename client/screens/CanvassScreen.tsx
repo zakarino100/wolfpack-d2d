@@ -456,8 +456,6 @@ export default function CanvassScreen() {
     setSaving(true);
 
     try {
-      const hasLeadData = homeownerName.trim() || phone.trim() || email.trim() || servicesInterested.length > 0;
-
       const payload = {
         pin: {
           title: address.address_line1,
@@ -470,7 +468,7 @@ export default function CanvassScreen() {
           longitude: address.longitude,
           status: outcome,
         },
-        lead: hasLeadData ? {
+        lead: {
           address_line1: address.address_line1,
           city: address.city,
           state: address.state,
@@ -481,15 +479,15 @@ export default function CanvassScreen() {
           phone: phone || null,
           email: email || null,
           services_interested: servicesInterested.length > 0 ? servicesInterested : null,
-        } : null,
-        touch: hasLeadData ? {
+        },
+        touch: {
           touch_type: "knock" as const,
           outcome,
           notes: notes || null,
           next_followup_at: followupDate?.toISOString() || null,
           followup_channel: followupChannel,
           followup_priority: followupPriority,
-        } : null,
+        },
         quote:
           quoteLineItems.length > 0
             ? {
