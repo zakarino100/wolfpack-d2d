@@ -32,30 +32,123 @@ import {
 } from "./lib/crmAdapter";
 import { supabase } from "./lib/supabase";
 
-async function ensurePinStatusColumn() {
-  try {
-    const { error } = await supabase.rpc('exec_sql', { 
-      sql: "ALTER TABLE pins ADD COLUMN IF NOT EXISTS status text DEFAULT 'new'" 
-    });
-    if (error) {
-      // Try direct query approach - the column may already exist
-      const { data, error: testError } = await supabase
-        .from("pins")
-        .select("status")
-        .limit(1);
-      if (testError && testError.message.includes("status")) {
-        console.log("Warning: pins.status column may not exist. Run the migration: ALTER TABLE pins ADD COLUMN status text DEFAULT 'new'");
+async function runMigrations() {
+  const supabaseUrl = process.env.SUPABASE_URL!;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+  const runSQL = async (sql: string, label: string) => {
+    try {
+      const response = await fetch(`${supabaseUrl}/rest/v1/rpc/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": serviceKey,
+          "Authorization": `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({ query: sql }),
+      });
+      // rpc approach may not work, try direct SQL via pg
+    } catch {}
+  };
+
+  // Check if pins table exists by trying to query it
+  const { data, error } = await supabase
+    .from("pins")
+    .select("id")
+    .limit(1);
+
+  if (error && error.message.includes("does not exist")) {
+    console.log("Pins table not found. Creating pins table and updating leads...");
+
+    // Use Supabase's built-in SQL execution endpoint
+    const migrationSQL = `
+      CREATE TABLE IF NOT EXISTS pins (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now(),
+        title text NULL,
+        notes text NULL,
+        address_line1 text NULL,
+        city text NULL,
+        state text NULL,
+        zip text NULL,
+        latitude numeric NOT NULL,
+        longitude numeric NOT NULL,
+        created_by text NOT NULL,
+        business_unit text DEFAULT 'wolfpack_wash',
+        status text DEFAULT 'new'
+      );
+
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'leads' AND column_name = 'pin_id') THEN
+          ALTER TABLE leads ADD COLUMN pin_id uuid NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'leads' AND column_name = 'created_by') THEN
+          ALTER TABLE leads ADD COLUMN created_by text NULL;
+        END IF;
+      END $$;
+
+      CREATE INDEX IF NOT EXISTS idx_pins_location ON pins(latitude, longitude);
+      CREATE INDEX IF NOT EXISTS idx_pins_created_by ON pins(created_by);
+      CREATE INDEX IF NOT EXISTS idx_pins_business_unit ON pins(business_unit);
+      CREATE INDEX IF NOT EXISTS idx_leads_pin_id ON leads(pin_id);
+    `;
+
+    try {
+      const sqlResponse = await fetch(`${supabaseUrl}/sql`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": serviceKey,
+          "Authorization": `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({ query: migrationSQL }),
+      });
+
+      if (sqlResponse.ok) {
+        console.log("Migration completed: pins table created successfully");
+      } else {
+        const errBody = await sqlResponse.text();
+        console.log("SQL endpoint returned:", sqlResponse.status, errBody);
+        console.log("Please run the migration manually in Supabase SQL Editor:");
+        console.log("Copy contents of server/migrations/pins_and_leads_update.sql");
       }
+    } catch (sqlErr) {
+      console.log("Could not auto-run migration. Please run manually in Supabase SQL Editor:");
+      console.log("Copy contents of server/migrations/pins_and_leads_update.sql");
     }
-  } catch {
-    console.log("Note: Could not auto-add pins.status column. If pins don't show status, run: ALTER TABLE pins ADD COLUMN status text DEFAULT 'new'");
+  } else {
+    // Pins table exists, check for status column
+    const { error: statusErr } = await supabase
+      .from("pins")
+      .select("status")
+      .limit(1);
+
+    if (statusErr && statusErr.message.includes("status")) {
+      console.log("Adding status column to pins table...");
+      try {
+        const sqlResponse = await fetch(`${supabaseUrl}/sql`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": serviceKey,
+            "Authorization": `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ query: "ALTER TABLE pins ADD COLUMN IF NOT EXISTS status text DEFAULT 'new'" }),
+        });
+        if (sqlResponse.ok) {
+          console.log("Added status column to pins table");
+        }
+      } catch {}
+    }
+    console.log("Pins table verified");
   }
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(cookieParser());
 
-  ensurePinStatusColumn();
+  runMigrations().catch(err => console.error("Migration check failed:", err));
 
   app.get("/api/auth/google", async (req: Request, res: Response) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
