@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -7,6 +7,8 @@ import {
   Alert,
   Linking,
   Platform,
+  TextInput,
+  Modal,
 } from "react-native";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,14 +30,27 @@ import { QuoteCard } from "@/components/QuoteCard";
 import { MediaGrid } from "@/components/MediaGrid";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
+import { FormInput } from "@/components/FormInput";
+import { FormSelect } from "@/components/FormSelect";
+import { ServiceCheckbox } from "@/components/ServiceCheckbox";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
 import { BorderRadius, Spacing, Shadows } from "@/constants/theme";
-import { Lead, Touch, Quote, Media } from "@/types";
+import { Lead, Touch, Quote, Media, TouchOutcome, Service } from "@/types";
 import { apiRequest } from "@/lib/query-client";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type RouteProps = RouteProp<RootStackParamList, "LeadDetail">;
+
+const OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
+  { value: "no_answer", label: "No Answer" },
+  { value: "contacted", label: "Contacted" },
+  { value: "interested", label: "Interested" },
+  { value: "quoted", label: "Quoted" },
+  { value: "booked", label: "Booked" },
+  { value: "not_interested", label: "Not Interested" },
+  { value: "do_not_knock", label: "Do Not Knock" },
+];
 
 export default function LeadDetailScreen() {
   const { theme } = useTheme();
@@ -50,6 +65,20 @@ export default function LeadDetailScreen() {
   const [activeSection, setActiveSection] = useState<"timeline" | "quotes" | "media">(
     "timeline"
   );
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editServices, setEditServices] = useState<string[]>([]);
+  const [editStatus, setEditStatus] = useState<TouchOutcome | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const [showNewTouch, setShowNewTouch] = useState(false);
+  const [touchOutcome, setTouchOutcome] = useState<TouchOutcome | null>(null);
+  const [touchNotes, setTouchNotes] = useState("");
+  const [touchSaving, setTouchSaving] = useState(false);
+
+  const [services, setServices] = useState<Service[]>([]);
 
   const { data: leadData, isLoading: loadingLead } = useQuery<{ lead: Lead }>({
     queryKey: ["/api/leads", leadId],
@@ -77,6 +106,37 @@ export default function LeadDetailScreen() {
   const touches = touchesData?.touches || [];
   const quotes = quotesData?.quotes || [];
   const media = mediaData?.media || [];
+
+  useEffect(() => {
+    loadServices();
+  }, []);
+
+  useEffect(() => {
+    if (lead) {
+      setEditName(lead.homeowner_name || "");
+      setEditPhone(lead.phone || "");
+      setEditEmail(lead.email || "");
+      setEditServices(lead.services_interested || []);
+      setEditStatus(lead.status as TouchOutcome || null);
+    }
+  }, [lead]);
+
+  const loadServices = async () => {
+    try {
+      const response = await apiRequest("GET", "/api/services");
+      const data = await response.json();
+      setServices(data.services || []);
+    } catch {
+      setServices([
+        { id: "1", business_unit: "wolfpack_wash", key: "house_wash", label: "House Wash", active: true },
+        { id: "2", business_unit: "wolfpack_wash", key: "driveway", label: "Driveway/Walkway", active: true },
+        { id: "3", business_unit: "wolfpack_wash", key: "roof_wash", label: "Roof Wash", active: true },
+        { id: "4", business_unit: "wolfpack_wash", key: "gutters", label: "Gutters", active: true },
+        { id: "5", business_unit: "wolfpack_wash", key: "windows", label: "Windows", active: true },
+        { id: "6", business_unit: "wolfpack_wash", key: "deck_fence", label: "Deck/Fence", active: true },
+      ]);
+    }
+  };
 
   const logCallMutation = useMutation({
     mutationFn: async () => {
@@ -151,6 +211,62 @@ export default function LeadDetailScreen() {
     }
   };
 
+  const handleSaveEdit = async () => {
+    if (!lead) return;
+    setSaving(true);
+    try {
+      await apiRequest("PUT", `/api/leads/${leadId}`, {
+        homeowner_name: editName || null,
+        phone: editPhone || null,
+        email: editEmail || null,
+        services_interested: editServices.length > 0 ? editServices : null,
+        status: editStatus || lead.status,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", leadId] });
+      setIsEditing(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Error", "Failed to update lead");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveTouch = async () => {
+    if (!touchOutcome) {
+      Alert.alert("Missing Info", "Please select an outcome");
+      return;
+    }
+    setTouchSaving(true);
+    try {
+      await apiRequest("POST", "/api/touches/create", {
+        client_generated_id: `touch-${Date.now()}`,
+        lead_id: leadId,
+        touch: {
+          touch_type: "knock",
+          outcome: touchOutcome,
+          notes: touchNotes || null,
+        },
+      });
+
+      await apiRequest("PUT", `/api/leads/${leadId}`, {
+        status: touchOutcome,
+        last_touch_at: new Date().toISOString(),
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", leadId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", leadId, "touches"] });
+      setShowNewTouch(false);
+      setTouchOutcome(null);
+      setTouchNotes("");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Error", "Failed to save touch");
+    } finally {
+      setTouchSaving(false);
+    }
+  };
+
   const formatFollowup = (dateStr: string | null) => {
     if (!dateStr) return null;
     const date = new Date(dateStr);
@@ -210,81 +326,159 @@ export default function LeadDetailScreen() {
                 {[lead.city, lead.state, lead.zip].filter(Boolean).join(", ")}
               </ThemedText>
             </View>
-            <StatusBadge status={lead.status} />
-          </View>
-
-          {lead.homeowner_name ? (
-            <View style={styles.contactRow}>
-              <Feather name="user" size={16} color={theme.textSecondary} />
-              <ThemedText type="body">{lead.homeowner_name}</ThemedText>
-            </View>
-          ) : null}
-
-          {lead.phone ? (
-            <View style={styles.contactRow}>
-              <Feather name="phone" size={16} color={theme.textSecondary} />
-              <ThemedText type="body">{lead.phone}</ThemedText>
-            </View>
-          ) : null}
-
-          {lead.email ? (
-            <View style={styles.contactRow}>
-              <Feather name="mail" size={16} color={theme.textSecondary} />
-              <ThemedText type="body">{lead.email}</ThemedText>
-            </View>
-          ) : null}
-
-          {followup ? (
-            <View
-              style={[
-                styles.followupBanner,
-                {
-                  backgroundColor: followup.isOverdue
-                    ? `${theme.error}15`
-                    : `${theme.primary}15`,
-                },
-              ]}
-            >
-              <Feather
-                name="calendar"
-                size={16}
-                color={followup.isOverdue ? theme.error : theme.primary}
-              />
-              <ThemedText
-                type="body"
-                style={{
-                  color: followup.isOverdue ? theme.error : theme.primary,
-                  flex: 1,
+            <View style={styles.headerActions}>
+              <StatusBadge status={lead.status} />
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setIsEditing(!isEditing);
                 }}
+                style={[styles.editBtn, { backgroundColor: isEditing ? theme.error : `${theme.primary}15` }]}
+                testID="button-edit-lead"
               >
-                {followup.isOverdue ? "Overdue: " : "Next: "}
-                {followup.text}
-              </ThemedText>
-              {lead.followup_channel ? (
-                <ChannelIcon channel={lead.followup_channel} size={14} />
-              ) : null}
-              {lead.followup_priority ? (
-                <PriorityBadge priority={lead.followup_priority} />
-              ) : null}
+                <Feather name={isEditing ? "x" : "edit-2"} size={16} color={isEditing ? "#fff" : theme.primary} />
+              </Pressable>
             </View>
-          ) : null}
-
-          <View style={styles.actionButtons}>
-            {lead.phone ? (
-              <>
-                <ActionButton type="call" value={lead.phone} label="Call" onAction={handleCall} />
-                <ActionButton type="text" value={lead.phone} label="Text" onAction={handleText} />
-              </>
-            ) : null}
-            <ActionButton
-              type="maps"
-              value={`${lead.address_line1}, ${lead.city}, ${lead.state} ${lead.zip}`}
-              label="Maps"
-            />
           </View>
+
+          {isEditing ? (
+            <View style={styles.editForm}>
+              <FormSelect
+                label="Status"
+                value={editStatus}
+                options={OUTCOME_OPTIONS}
+                onChange={setEditStatus}
+              />
+              <FormInput
+                label="Homeowner Name"
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="John Smith"
+              />
+              <FormInput
+                label="Phone"
+                value={editPhone}
+                onChangeText={setEditPhone}
+                placeholder="(555) 123-4567"
+                keyboardType="phone-pad"
+              />
+              <FormInput
+                label="Email"
+                value={editEmail}
+                onChangeText={setEditEmail}
+                placeholder="john@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+              <ServiceCheckbox
+                services={services}
+                selected={editServices}
+                onChange={setEditServices}
+              />
+              <View style={styles.editActions}>
+                <Button
+                  onPress={handleSaveEdit}
+                  disabled={saving}
+                  style={{ flex: 1 }}
+                  testID="button-save-edit"
+                >
+                  {saving ? "Saving..." : "Save Changes"}
+                </Button>
+                <Pressable
+                  onPress={() => {
+                    setIsEditing(false);
+                    if (lead) {
+                      setEditName(lead.homeowner_name || "");
+                      setEditPhone(lead.phone || "");
+                      setEditEmail(lead.email || "");
+                      setEditServices(lead.services_interested || []);
+                      setEditStatus(lead.status as TouchOutcome || null);
+                    }
+                  }}
+                  style={styles.cancelEditBtn}
+                >
+                  <ThemedText type="body" style={{ color: theme.textSecondary }}>
+                    Cancel
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <>
+              {lead.homeowner_name ? (
+                <View style={styles.contactRow}>
+                  <Feather name="user" size={16} color={theme.textSecondary} />
+                  <ThemedText type="body">{lead.homeowner_name}</ThemedText>
+                </View>
+              ) : null}
+
+              {lead.phone ? (
+                <View style={styles.contactRow}>
+                  <Feather name="phone" size={16} color={theme.textSecondary} />
+                  <ThemedText type="body">{lead.phone}</ThemedText>
+                </View>
+              ) : null}
+
+              {lead.email ? (
+                <View style={styles.contactRow}>
+                  <Feather name="mail" size={16} color={theme.textSecondary} />
+                  <ThemedText type="body">{lead.email}</ThemedText>
+                </View>
+              ) : null}
+
+              {followup ? (
+                <View
+                  style={[
+                    styles.followupBanner,
+                    {
+                      backgroundColor: followup.isOverdue
+                        ? `${theme.error}15`
+                        : `${theme.primary}15`,
+                    },
+                  ]}
+                >
+                  <Feather
+                    name="calendar"
+                    size={16}
+                    color={followup.isOverdue ? theme.error : theme.primary}
+                  />
+                  <ThemedText
+                    type="body"
+                    style={{
+                      color: followup.isOverdue ? theme.error : theme.primary,
+                      flex: 1,
+                    }}
+                  >
+                    {followup.isOverdue ? "Overdue: " : "Next: "}
+                    {followup.text}
+                  </ThemedText>
+                  {lead.followup_channel ? (
+                    <ChannelIcon channel={lead.followup_channel} size={14} />
+                  ) : null}
+                  {lead.followup_priority ? (
+                    <PriorityBadge priority={lead.followup_priority} />
+                  ) : null}
+                </View>
+              ) : null}
+
+              <View style={styles.actionButtons}>
+                {lead.phone ? (
+                  <>
+                    <ActionButton type="call" value={lead.phone} label="Call" onAction={handleCall} />
+                    <ActionButton type="text" value={lead.phone} label="Text" onAction={handleText} />
+                  </>
+                ) : null}
+                <ActionButton
+                  type="maps"
+                  value={`${lead.address_line1}, ${lead.city}, ${lead.state} ${lead.zip}`}
+                  label="Maps"
+                />
+              </View>
+            </>
+          )}
         </View>
 
-        {lead.services_interested && lead.services_interested.length > 0 ? (
+        {!isEditing && lead.services_interested && lead.services_interested.length > 0 ? (
           <View style={styles.servicesSection}>
             <ThemedText type="h4" style={styles.sectionTitle}>
               Services Interested
@@ -394,9 +588,10 @@ export default function LeadDetailScreen() {
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            navigation.navigate("NewTouch" as never, { leadId } as never);
+            setShowNewTouch(true);
           }}
           style={[styles.fab, { backgroundColor: theme.primary }]}
+          testID="button-new-touch"
         >
           <Feather name="plus" size={24} color="#fff" />
           <ThemedText type="button" style={{ color: "#fff" }}>
@@ -404,6 +599,66 @@ export default function LeadDetailScreen() {
           </ThemedText>
         </Pressable>
       </View>
+
+      <Modal
+        visible={showNewTouch}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowNewTouch(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundRoot }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="h3">Log New Touch</ThemedText>
+              <Pressable onPress={() => setShowNewTouch(false)} testID="button-close-touch-modal">
+                <Feather name="x" size={24} color={theme.textSecondary} />
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              <FormSelect
+                label="Outcome *"
+                value={touchOutcome}
+                options={OUTCOME_OPTIONS}
+                onChange={setTouchOutcome}
+              />
+
+              <FormInput
+                label="Notes"
+                value={touchNotes}
+                onChangeText={setTouchNotes}
+                placeholder="Add notes about this visit..."
+                multiline
+                numberOfLines={3}
+                style={{ height: 80, textAlignVertical: "top", paddingTop: Spacing.sm }}
+              />
+
+              <View style={styles.modalActions}>
+                <Button
+                  onPress={handleSaveTouch}
+                  disabled={touchSaving || !touchOutcome}
+                  style={{ width: "100%" }}
+                  testID="button-save-touch"
+                >
+                  {touchSaving ? "Saving..." : "Save Touch"}
+                </Button>
+                <Pressable
+                  onPress={() => {
+                    setShowNewTouch(false);
+                    setTouchOutcome(null);
+                    setTouchNotes("");
+                  }}
+                  style={styles.cancelEditBtn}
+                >
+                  <ThemedText type="body" style={{ color: theme.textSecondary }}>
+                    Cancel
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -430,6 +685,18 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: Spacing.md,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  editBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   contactRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -448,6 +715,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: Spacing.md,
     marginTop: Spacing.lg,
+  },
+  editForm: {
+    marginTop: Spacing.sm,
+  },
+  editActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  cancelEditBtn: {
+    alignItems: "center",
+    padding: Spacing.md,
   },
   servicesSection: {
     marginBottom: Spacing.lg,
@@ -498,5 +778,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     borderRadius: BorderRadius.full,
     gap: Spacing.sm,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    maxHeight: "70%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: Spacing.lg,
+    paddingBottom: Spacing.md,
+  },
+  modalScroll: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing["4xl"],
+  },
+  modalActions: {
+    marginTop: Spacing.lg,
+    marginBottom: Spacing["4xl"],
+    gap: Spacing.md,
   },
 });

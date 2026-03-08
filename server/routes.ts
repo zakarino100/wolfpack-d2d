@@ -500,6 +500,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/leads/:id", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const leadId = req.params.id;
+
+      const allowed = await canEditLead(leadId, user.email, user.role === "admin");
+      if (!allowed) {
+        return res.status(403).json({ error: "Not authorized to edit this lead" });
+      }
+
+      const ALLOWED_FIELDS = [
+        "homeowner_name", "phone", "email", "status",
+        "services_interested", "last_touch_at", "next_followup_at",
+        "followup_channel", "followup_priority", "notes",
+      ];
+      const VALID_STATUSES = [
+        "no_answer", "contacted", "interested", "quoted",
+        "booked", "not_interested", "do_not_knock",
+      ];
+
+      const sanitized: Record<string, unknown> = {};
+      for (const field of ALLOWED_FIELDS) {
+        if (req.body[field] !== undefined) {
+          sanitized[field] = req.body[field];
+        }
+      }
+
+      if (sanitized.status && !VALID_STATUSES.includes(sanitized.status as string)) {
+        return res.status(400).json({ error: "Invalid status value" });
+      }
+
+      if (Object.keys(sanitized).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      sanitized.updated_at = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from("leads")
+        .update(sanitized)
+        .eq("id", leadId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: "Lead not found" });
+
+      await logActivity({
+        activity_type: "d2d_lead_updated",
+        lead_id: leadId,
+        title: `Lead updated at ${data.address_line1 || 'unknown'}`,
+        actor: user.email,
+      });
+
+      res.json({ lead: data });
+    } catch (error) {
+      console.error("Failed to update lead:", error);
+      res.status(500).json({ error: "Failed to update lead" });
+    }
+  });
+
   app.get("/api/leads/:id/touches", authMiddleware, async (req: Request, res: Response) => {
     try {
       const touches = await getTouches(req.params.id);

@@ -45,6 +45,7 @@ A mobile-first D2D canvassing app for Wolfpack Wash that integrates with the exi
 - `GET /api/leads/:id/touches` - Get touch history
 - `GET /api/leads/:id/quotes` - Get quotes
 - `GET /api/leads/:id/can-edit` - Check if user can edit lead
+- `PUT /api/leads/:id` - Update lead (authorized, field-whitelisted)
 - `POST /api/touches/create` - Create touch + lead + quote
 - `POST /api/sync/batch` - Sync offline queue
 - `GET /api/pins` - List all pins with linked leads
