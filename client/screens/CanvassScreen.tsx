@@ -670,7 +670,7 @@ export default function CanvassScreen() {
 
       {canvassMode === "add_pin" ? (
         <Animated.View
-          entering={FadeInUp.springify()}
+          entering={FadeInUp.duration(300)}
           style={[styles.modeIndicator, { backgroundColor: theme.primary }]}
         >
           <Feather name="map-pin" size={16} color="white" />
@@ -705,7 +705,7 @@ export default function CanvassScreen() {
 
       {previewPin ? (
         <Animated.View
-          entering={SlideInDown.springify().damping(20)}
+          entering={SlideInDown.duration(300)}
           style={[
             styles.previewCard,
             { backgroundColor: theme.backgroundRoot },
@@ -784,7 +784,7 @@ export default function CanvassScreen() {
 
       {showForm && address ? (
         <Animated.View
-          entering={SlideInDown.springify().damping(20)}
+          entering={SlideInDown.duration(300)}
           style={[
             styles.bottomSheet,
             { backgroundColor: theme.backgroundRoot },
