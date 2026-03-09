@@ -2,9 +2,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { User, PendingSync } from "@/types";
 
 const KEYS = {
-  USER: "@wolfpack_d2d_user",
-  AUTH_TOKEN: "@wolfpack_d2d_token",
-  PENDING_SYNC: "@wolfpack_d2d_pending_sync",
+  USER: "@healthy_home_user",
+  AUTH_TOKEN: "@healthy_home_token",
+  PENDING_SYNC: "@healthy_home_pending_sync",
 };
 
 export async function getStoredUser(): Promise<User | null> {

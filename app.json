@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Wolfpack D2D",
+    "name": "Healthy Home",
     "slug": "wolfpack-d2d",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "wolfpackd2d",
+    "scheme": "healthyhome",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -17,7 +17,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0066CC",
+        "backgroundColor": "#4A9B8E",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -42,9 +42,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#0066CC",
+          "backgroundColor": "#4A9B8E",
           "dark": {
-            "backgroundColor": "#1C1C1E"
+            "backgroundColor": "#1B3A4B"
           }
         }
       ],
@@ -52,19 +52,19 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Wolfpack D2D to use your location for canvassing."
+          "locationAlwaysAndWhenInUsePermission": "Allow Healthy Home to use your location for canvassing."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Wolfpack D2D to access your camera for capturing property photos."
+          "cameraPermission": "Allow Healthy Home to access your camera for capturing property photos."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Wolfpack D2D to access your photos for uploading property images."
+          "photosPermission": "Allow Healthy Home to access your photos for uploading property images."
         }
       ]
     ],

@@ -163,7 +163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
     
-    const appRedirectUri = req.query.app_redirect_uri as string || "wolfpackd2d://auth/callback";
+    const appRedirectUri = req.query.app_redirect_uri as string || "healthyhome://auth/callback";
     console.log("OAuth redirect_uri:", redirectUri);
     console.log("App redirect_uri:", appRedirectUri);
     console.log("Is production:", isProduction);
@@ -183,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log("OAuth callback hit with query:", req.query);
     const { code, state } = req.query;
     
-    let appRedirectUri = "wolfpackd2d://auth/callback";
+    let appRedirectUri = "healthyhome://auth/callback";
     if (state) {
       try {
         appRedirectUri = Buffer.from(state as string, "base64").toString("utf-8");
@@ -469,12 +469,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Failed to get services:", error);
       res.json({
         services: [
-          { id: "1", business_unit: "wolfpack_wash", key: "house_wash", label: "House Wash", active: true },
-          { id: "2", business_unit: "wolfpack_wash", key: "driveway", label: "Driveway/Walkway", active: true },
-          { id: "3", business_unit: "wolfpack_wash", key: "roof_wash", label: "Roof Wash", active: true },
-          { id: "4", business_unit: "wolfpack_wash", key: "gutters", label: "Gutters", active: true },
-          { id: "5", business_unit: "wolfpack_wash", key: "windows", label: "Windows", active: true },
-          { id: "6", business_unit: "wolfpack_wash", key: "deck_fence", label: "Deck/Fence", active: true },
+          { id: "1", business_unit: "healthy_home", key: "house_wash", label: "House Wash", active: true },
+          { id: "2", business_unit: "healthy_home", key: "cement_cleaning", label: "Cement Cleaning", active: true },
+          { id: "3", business_unit: "healthy_home", key: "roof_wash", label: "Roof Wash", active: true },
+          { id: "4", business_unit: "healthy_home", key: "gutter_cleaning", label: "Gutter Cleaning", active: true },
+          { id: "5", business_unit: "healthy_home", key: "window_cleaning", label: "Window Cleaning", active: true },
+          { id: "6", business_unit: "healthy_home", key: "deck_staining", label: "Deck Staining", active: true },
+          { id: "7", business_unit: "healthy_home", key: "driveway_sealing", label: "Driveway Sealing", active: true },
+          { id: "8", business_unit: "healthy_home", key: "holiday_lighting", label: "Holiday Lighting", active: true },
+          { id: "9", business_unit: "healthy_home", key: "other", label: "Other", active: true },
         ],
       });
     }

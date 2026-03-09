@@ -41,11 +41,11 @@ export default function LoginScreen() {
       <Animated.View entering={FadeIn.delay(200).duration(600)} style={styles.logoContainer}>
         <View style={[styles.logoBackground, { backgroundColor: "#fff" }]}>
           <ThemedText type="h1" style={[styles.logoText, { color: theme.primary }]}>
-            WW
+            HH
           </ThemedText>
         </View>
         <ThemedText type="h2" style={styles.appName}>
-          Wolfpack D2D
+          Healthy Home
         </ThemedText>
         <ThemedText type="body" style={styles.subtitle}>
           Door-to-Door Canvassing
