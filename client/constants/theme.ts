@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 
-const primaryBlue = "#0066CC";
-const safetyOrange = "#FF6B35";
+const brandPrimary = "#4A9B8E";
+const brandDark = "#1B3A4B";
 
 export const Colors = {
   light: {
@@ -9,38 +9,35 @@ export const Colors = {
     textSecondary: "#8E8E93",
     buttonText: "#FFFFFF",
     tabIconDefault: "#8E8E93",
-    tabIconSelected: primaryBlue,
-    link: primaryBlue,
-    primary: primaryBlue,
-    secondary: safetyOrange,
-    backgroundRoot: "#FFFFFF",
-    backgroundDefault: "#F5F5F7",
-    backgroundSecondary: "#E8E8ED",
+    tabIconSelected: brandPrimary,
+    link: brandPrimary,
+    primary: brandPrimary,
+    secondary: brandDark,
+    backgroundRoot: "#F7FAF9",
+    backgroundDefault: "#FFFFFF",
+    backgroundSecondary: "#EDF2F0",
     backgroundTertiary: "#D1D1D6",
     border: "#C6C6C8",
     borderLight: "#E5E5EA",
-    success: "#34C759",
-    warning: "#FFCC00",
-    error: "#FF3B30",
+    success: "#22C55E",
+    warning: "#F59E0B",
+    error: "#EF4444",
     info: "#007AFF",
-    statusNew: "#34C759",
-    statusInterested: "#007AFF",
-    statusQuoted: "#FF9500",
-    statusBooked: "#5856D6",
-    statusDoNotKnock: "#FF3B30",
-    statusNoAnswer: "#8E8E93",
-    statusContacted: "#32ADE6",
-    statusNotInterested: "#AF52DE",
+    statusNotHome: "#9CA3AF",
+    statusNotInterested: "#EF4444",
+    statusFollowUp: "#F59E0B",
+    statusSold: "#22C55E",
+    statusCompleted: "#4A9B8E",
   },
   dark: {
     text: "#ECEDEE",
     textSecondary: "#8E8E93",
     buttonText: "#FFFFFF",
     tabIconDefault: "#9BA1A6",
-    tabIconSelected: "#0A84FF",
-    link: "#0A84FF",
-    primary: "#0A84FF",
-    secondary: "#FF6B35",
+    tabIconSelected: "#5BB8A9",
+    link: "#5BB8A9",
+    primary: "#5BB8A9",
+    secondary: "#C8DDD5",
     backgroundRoot: "#1C1C1E",
     backgroundDefault: "#2C2C2E",
     backgroundSecondary: "#3A3A3C",
@@ -51,14 +48,11 @@ export const Colors = {
     warning: "#FFD60A",
     error: "#FF453A",
     info: "#0A84FF",
-    statusNew: "#30D158",
-    statusInterested: "#0A84FF",
-    statusQuoted: "#FF9F0A",
-    statusBooked: "#5E5CE6",
-    statusDoNotKnock: "#FF453A",
-    statusNoAnswer: "#8E8E93",
-    statusContacted: "#64D2FF",
-    statusNotInterested: "#BF5AF2",
+    statusNotHome: "#8E8E93",
+    statusNotInterested: "#FF453A",
+    statusFollowUp: "#FFD60A",
+    statusSold: "#30D158",
+    statusCompleted: "#5BB8A9",
   },
 };
 
@@ -194,3 +188,30 @@ export const Fonts = Platform.select({
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
+
+export const LEAD_STATUSES = {
+  not_home: { label: "Not Home", color: "#9CA3AF" },
+  not_interested: { label: "Not Interested", color: "#EF4444" },
+  follow_up: { label: "Follow Up", color: "#F59E0B" },
+  sold: { label: "Sold", color: "#22C55E" },
+  completed: { label: "Completed", color: "#4A9B8E" },
+};
+
+export const SERVICES = [
+  "House Wash",
+  "Cement Cleaning",
+  "Roof Wash",
+  "Gutter Cleaning",
+  "Window Cleaning",
+  "Deck Staining",
+  "Driveway Sealing",
+  "Holiday Lighting",
+  "Other",
+];
+
+export const BRAND = {
+  primary: "#4A9B8E",
+  dark: "#1B3A4B",
+  light: "#C8DDD5",
+  bg: "#F7FAF9",
+};

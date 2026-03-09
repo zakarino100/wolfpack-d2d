@@ -64,13 +64,11 @@ const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 type CanvassMode = "view" | "add_pin";
 
 const OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
-  { value: "no_answer", label: "No Answer" },
-  { value: "contacted", label: "Contacted" },
-  { value: "interested", label: "Interested" },
-  { value: "quoted", label: "Quoted" },
-  { value: "booked", label: "Booked" },
+  { value: "not_home", label: "Not Home" },
   { value: "not_interested", label: "Not Interested" },
-  { value: "do_not_knock", label: "Do Not Knock" },
+  { value: "follow_up", label: "Follow Up" },
+  { value: "sold", label: "Sold" },
+  { value: "completed", label: "Completed" },
 ];
 
 const DEFAULT_REGION: Region = {
@@ -570,24 +568,18 @@ export default function CanvassScreen() {
 
   const getMarkerConfig = (status: string): { color: string; icon: string } => {
     switch (status) {
-      case "new":
-        return { color: theme.statusNew, icon: "plus-circle" };
-      case "no_answer":
-        return { color: theme.statusContacted, icon: "minus-circle" };
-      case "contacted":
-        return { color: theme.statusContacted, icon: "phone" };
-      case "interested":
-        return { color: theme.statusInterested, icon: "star" };
-      case "quoted":
-        return { color: theme.statusQuoted, icon: "file-text" };
-      case "booked":
-        return { color: "#34C759", icon: "check-circle" };
+      case "not_home":
+        return { color: theme.statusNotHome, icon: "minus-circle" };
       case "not_interested":
-        return { color: "#FF3B30", icon: "x-circle" };
-      case "do_not_knock":
-        return { color: theme.statusDoNotKnock, icon: "slash" };
+        return { color: theme.statusNotInterested, icon: "x-circle" };
+      case "follow_up":
+        return { color: theme.statusFollowUp, icon: "clock" };
+      case "sold":
+        return { color: theme.statusSold, icon: "check-circle" };
+      case "completed":
+        return { color: theme.statusCompleted, icon: "check" };
       default:
-        return { color: theme.statusContacted, icon: "map-pin" };
+        return { color: theme.statusNotHome, icon: "map-pin" };
     }
   };
 

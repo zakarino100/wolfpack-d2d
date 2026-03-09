@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Pressable, Alert } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, StyleSheet, Pressable, Alert, Switch, AppState, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -17,6 +20,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { BorderRadius, Spacing, Shadows } from "@/constants/theme";
 import { getPendingSyncs, removePendingSync } from "@/lib/storage";
 import { apiRequest } from "@/lib/query-client";
+import { Pin, Lead } from "@/types";
+
+const LOCATION_SHARING_KEY = "@healthy_home_share_location";
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
@@ -27,14 +33,88 @@ export default function ProfileScreen() {
 
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [shareLocation, setShareLocation] = useState(false);
+  const locationInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { data: pinsData } = useQuery<{ pins: Pin[] }>({
+    queryKey: ["/api/pins"],
+  });
+
+  const { data: leadsData } = useQuery<{ leads: Lead[] }>({
+    queryKey: ["/api/leads"],
+  });
+
+  const pins = pinsData?.pins || [];
+  const leads = leadsData?.leads || [];
+
+  const today = new Date().toISOString().split("T")[0];
+  const todayPins = pins.filter(
+    (p) => p.created_at.split("T")[0] === today && p.created_by === user?.email
+  );
+  const todayLeads = leads.filter(
+    (l) => l.created_at.split("T")[0] === today && l.created_by === user?.email
+  );
+  const todaySold = todayLeads.filter((l) => l.status === "sold");
 
   useEffect(() => {
     loadPendingCount();
+    loadLocationPref();
   }, []);
+
+  useEffect(() => {
+    if (shareLocation) {
+      startLocationTracking();
+    } else {
+      stopLocationTracking();
+    }
+    return () => stopLocationTracking();
+  }, [shareLocation]);
 
   const loadPendingCount = async () => {
     const pending = await getPendingSyncs();
     setPendingCount(pending.length);
+  };
+
+  const loadLocationPref = async () => {
+    const stored = await AsyncStorage.getItem(LOCATION_SHARING_KEY);
+    if (stored === "true") setShareLocation(true);
+  };
+
+  const toggleLocationSharing = async (value: boolean) => {
+    if (value) {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Location permission is needed to share your position with admins.");
+        return;
+      }
+    }
+    setShareLocation(value);
+    await AsyncStorage.setItem(LOCATION_SHARING_KEY, value ? "true" : "false");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const startLocationTracking = () => {
+    sendLocation();
+    locationInterval.current = setInterval(sendLocation, 60000);
+  };
+
+  const stopLocationTracking = () => {
+    if (locationInterval.current) {
+      clearInterval(locationInterval.current);
+      locationInterval.current = null;
+    }
+  };
+
+  const sendLocation = async () => {
+    try {
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      await apiRequest("POST", "/api/rep-locations", {
+        lat: location.coords.latitude,
+        lng: location.coords.longitude,
+      });
+    } catch {}
   };
 
   const handleSync = async () => {
@@ -46,9 +126,7 @@ export default function ProfileScreen() {
         try {
           await apiRequest("POST", "/api/sync/batch", { items: [item] });
           await removePendingSync(item.id);
-        } catch {
-          console.log("Failed to sync item:", item.id);
-        }
+        } catch {}
       }
       await loadPendingCount();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -63,11 +141,7 @@ export default function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: signOut,
-      },
+      { text: "Sign Out", style: "destructive", onPress: signOut },
     ]);
   };
 
@@ -117,6 +191,71 @@ export default function ProfileScreen() {
 
       <View style={styles.section}>
         <ThemedText type="h4" style={styles.sectionTitle}>
+          Today's Stats
+        </ThemedText>
+        <View style={styles.statsRow}>
+          <View style={[styles.statCard, { backgroundColor: theme.backgroundDefault }]}>
+            <Feather name="map-pin" size={20} color={theme.primary} />
+            <ThemedText type="h2" style={{ color: theme.primary }}>
+              {todayPins.length}
+            </ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              Doors
+            </ThemedText>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: theme.backgroundDefault }]}>
+            <Feather name="users" size={20} color={theme.info} />
+            <ThemedText type="h2" style={{ color: theme.info }}>
+              {todayLeads.length}
+            </ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              Leads
+            </ThemedText>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: theme.backgroundDefault }]}>
+            <Feather name="check-circle" size={20} color={theme.success} />
+            <ThemedText type="h2" style={{ color: theme.success }}>
+              {todaySold.length}
+            </ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              Sold
+            </ThemedText>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <ThemedText type="h4" style={styles.sectionTitle}>
+          Location Sharing
+        </ThemedText>
+        <View style={[styles.locationCard, { backgroundColor: theme.backgroundDefault }]}>
+          <View style={styles.locationInfo}>
+            <Feather
+              name={shareLocation ? "navigation" : "navigation"}
+              size={20}
+              color={shareLocation ? theme.primary : theme.textSecondary}
+            />
+            <View style={{ flex: 1 }}>
+              <ThemedText type="body">Share with admin</ThemedText>
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                {shareLocation
+                  ? "Your location is visible to admins"
+                  : "Location sharing is off"}
+              </ThemedText>
+            </View>
+            <Switch
+              value={shareLocation}
+              onValueChange={toggleLocationSharing}
+              trackColor={{ false: theme.backgroundTertiary, true: `${theme.primary}80` }}
+              thumbColor={shareLocation ? theme.primary : theme.textSecondary}
+              testID="switch-location-sharing"
+            />
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <ThemedText type="h4" style={styles.sectionTitle}>
           Sync Status
         </ThemedText>
         <View style={[styles.syncCard, { backgroundColor: theme.backgroundDefault }]}>
@@ -140,11 +279,7 @@ export default function ProfileScreen() {
             </View>
           </View>
           {pendingCount > 0 ? (
-            <Button
-              onPress={handleSync}
-              disabled={syncing}
-              style={styles.syncBtn}
-            >
+            <Button onPress={handleSync} disabled={syncing} style={styles.syncBtn}>
               {syncing ? "Syncing..." : "Sync Now"}
             </Button>
           ) : null}
@@ -167,7 +302,7 @@ export default function ProfileScreen() {
             <ThemedText type="body" style={{ color: theme.textSecondary }}>
               Business Unit
             </ThemedText>
-            <ThemedText type="body">Wolfpack Wash</ThemedText>
+            <ThemedText type="body">Healthy Home</ThemedText>
           </View>
         </View>
       </View>
@@ -176,6 +311,7 @@ export default function ProfileScreen() {
         <Pressable
           onPress={handleSignOut}
           style={[styles.signOutBtn, { backgroundColor: `${theme.error}15` }]}
+          testID="button-sign-out"
         >
           <Feather name="log-out" size={20} color={theme.error} />
           <ThemedText type="body" style={{ color: theme.error, fontWeight: "600" }}>
@@ -222,6 +358,26 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: Spacing.md,
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: Spacing.md,
+  },
+  statCard: {
+    flex: 1,
+    alignItems: "center",
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.xs,
+  },
+  locationCard: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+  },
+  locationInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
   },
   syncCard: {
     padding: Spacing.lg,

@@ -2,6 +2,7 @@ import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import MainTabNavigator from "@/navigation/MainTabNavigator";
+import AdminTabNavigator from "@/navigation/AdminTabNavigator";
 import LoginScreen from "@/screens/LoginScreen";
 import LeadDetailScreen from "@/screens/LeadDetailScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
@@ -13,7 +14,6 @@ export type RootStackParamList = {
   Login: undefined;
   Main: undefined;
   LeadDetail: { leadId: string };
-  NewTouch: { leadId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -36,7 +36,7 @@ export default function RootStackNavigator() {
         <>
           <Stack.Screen
             name="Main"
-            component={MainTabNavigator}
+            component={user.role === "admin" ? AdminTabNavigator : MainTabNavigator}
             options={{ headerShown: false }}
           />
           <Stack.Screen

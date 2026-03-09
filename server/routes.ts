@@ -516,8 +516,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "followup_channel", "followup_priority", "notes",
       ];
       const VALID_STATUSES = [
-        "no_answer", "contacted", "interested", "quoted",
-        "booked", "not_interested", "do_not_knock",
+        "not_home", "not_interested", "follow_up", "sold", "completed",
+        "no_answer", "contacted", "interested", "quoted", "booked", "do_not_knock",
       ];
 
       const sanitized: Record<string, unknown> = {};
@@ -920,6 +920,394 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Reverse geocode error:", error);
       res.status(500).json({ error: "Geocoding failed" });
+    }
+  });
+
+  // ========================
+  // Routes & Route Stops
+  // ========================
+
+  app.get("/api/routes", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      let query = supabase.from("routes").select("*, route_stops(*, lead:leads(*))").order("date", { ascending: true });
+
+      if (user.role !== "admin") {
+        query = query.eq("rep_email", user.email);
+      }
+
+      if (req.query.date) {
+        query = query.eq("date", req.query.date);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const routes = (data || []).map((r: any) => ({
+        ...r,
+        stops: (r.route_stops || []).sort((a: any, b: any) => a.stop_order - b.stop_order),
+      }));
+      delete (routes as any).route_stops;
+
+      res.json({ routes });
+    } catch (error) {
+      console.error("Failed to get routes:", error);
+      res.status(500).json({ error: "Failed to get routes" });
+    }
+  });
+
+  app.post("/api/routes", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const { name, date, rep_email, rep_name, status } = req.body;
+
+      const { data, error } = await supabase
+        .from("routes")
+        .insert({
+          admin_id: user.email,
+          name: name || null,
+          date,
+          rep_email: rep_email || null,
+          rep_name: rep_name || null,
+          status: status || "draft",
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await logActivity({
+        activity_type: "route_created",
+        title: `Route created for ${date}`,
+        details: { route_id: data.id, rep_email },
+        actor: user.email,
+      });
+
+      res.json({ route: data });
+    } catch (error) {
+      console.error("Failed to create route:", error);
+      res.status(500).json({ error: "Failed to create route" });
+    }
+  });
+
+  app.put("/api/routes/:id", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const { name, date, rep_email, rep_name, status } = req.body;
+
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (name !== undefined) updates.name = name;
+      if (date !== undefined) updates.date = date;
+      if (rep_email !== undefined) updates.rep_email = rep_email;
+      if (rep_name !== undefined) updates.rep_name = rep_name;
+      if (status !== undefined) updates.status = status;
+
+      const { data, error } = await supabase
+        .from("routes")
+        .update(updates)
+        .eq("id", req.params.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await logActivity({
+        activity_type: "route_updated",
+        title: `Route updated: ${data.name || data.date}`,
+        details: { route_id: data.id },
+        actor: user.email,
+      });
+
+      res.json({ route: data });
+    } catch (error) {
+      console.error("Failed to update route:", error);
+      res.status(500).json({ error: "Failed to update route" });
+    }
+  });
+
+  app.delete("/api/routes/:id", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { error } = await supabase.from("routes").delete().eq("id", req.params.id);
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete route" });
+    }
+  });
+
+  app.post("/api/routes/:id/stops", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { lead_id, stop_order, arrival_window, notes } = req.body;
+
+      const { data, error } = await supabase
+        .from("route_stops")
+        .insert({
+          route_id: req.params.id,
+          lead_id,
+          stop_order: stop_order || 0,
+          arrival_window: arrival_window || null,
+          notes: notes || null,
+        })
+        .select("*, lead:leads(*)")
+        .single();
+
+      if (error) throw error;
+      res.json({ stop: data });
+    } catch (error) {
+      console.error("Failed to add stop:", error);
+      res.status(500).json({ error: "Failed to add stop" });
+    }
+  });
+
+  app.put("/api/routes/:id/stops/:stopId", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { stop_order, arrival_window, notes, status } = req.body;
+
+      const updates: Record<string, unknown> = {};
+      if (stop_order !== undefined) updates.stop_order = stop_order;
+      if (arrival_window !== undefined) updates.arrival_window = arrival_window;
+      if (notes !== undefined) updates.notes = notes;
+      if (status !== undefined) updates.status = status;
+
+      const { data, error } = await supabase
+        .from("route_stops")
+        .update(updates)
+        .eq("id", req.params.stopId)
+        .select("*, lead:leads(*)")
+        .single();
+
+      if (error) throw error;
+      res.json({ stop: data });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update stop" });
+    }
+  });
+
+  app.delete("/api/routes/:id/stops/:stopId", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { error } = await supabase.from("route_stops").delete().eq("id", req.params.stopId);
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete stop" });
+    }
+  });
+
+  app.get("/api/routes/:id/sms", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { data: route, error } = await supabase
+        .from("routes")
+        .select("*, route_stops(*, lead:leads(*))")
+        .eq("id", req.params.id)
+        .single();
+
+      if (error) throw error;
+
+      const stops = (route.route_stops || []).sort((a: any, b: any) => a.stop_order - b.stop_order);
+      let sms = `Healthy Home — Route for ${route.date}\nAssigned to: ${route.rep_name || route.rep_email || "Unassigned"}\n\n`;
+
+      stops.forEach((stop: any, i: number) => {
+        const lead = stop.lead;
+        sms += `Stop ${i + 1} — ${lead?.address_line1 || "Unknown"}\n`;
+        if (stop.arrival_window) sms += `Arrival: ${stop.arrival_window}\n`;
+        if (lead?.services_interested?.length) sms += `Services: ${lead.services_interested.join(", ")}\n`;
+        if (lead?.homeowner_name || lead?.contact_name) sms += `Customer: ${lead.homeowner_name || lead.contact_name}`;
+        if (lead?.phone || lead?.contact_phone) sms += ` (${lead.phone || lead.contact_phone})`;
+        sms += "\n";
+        if (stop.notes) sms += `Notes: ${stop.notes}\n`;
+        sms += "\n";
+      });
+
+      sms += `Total stops: ${stops.length}\nQuestions? Call the office.`;
+
+      res.json({ sms });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate SMS" });
+    }
+  });
+
+  // ========================
+  // Rep Locations
+  // ========================
+
+  app.post("/api/rep-locations", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const { lat, lng } = req.body;
+
+      const { data, error } = await supabase
+        .from("rep_locations")
+        .insert({
+          rep_email: user.email,
+          rep_name: user.name,
+          lat,
+          lng,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json({ location: data });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save location" });
+    }
+  });
+
+  app.get("/api/rep-locations/live", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+      const { data, error } = await supabase
+        .from("rep_locations")
+        .select("*")
+        .gte("recorded_at", fiveMinAgo)
+        .order("recorded_at", { ascending: false });
+
+      if (error) throw error;
+
+      const latestByRep = new Map<string, any>();
+      (data || []).forEach((loc: any) => {
+        if (!latestByRep.has(loc.rep_email)) {
+          latestByRep.set(loc.rep_email, loc);
+        }
+      });
+
+      res.json({ locations: Array.from(latestByRep.values()) });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get rep locations" });
+    }
+  });
+
+  // ========================
+  // Analytics
+  // ========================
+
+  app.get("/api/analytics/summary", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { start_date, end_date } = req.query;
+      let query = supabase.from("leads").select("id, status, created_at, sold_at");
+
+      if (start_date) query = query.gte("created_at", start_date);
+      if (end_date) query = query.lte("created_at", end_date);
+
+      const { data: leads, error } = await query;
+      if (error) throw error;
+
+      const allLeads = leads || [];
+      const total_leads = allLeads.length;
+      const total_sold = allLeads.filter((l: any) => l.status === "sold").length;
+      const total_completed = allLeads.filter((l: any) => l.status === "completed").length;
+
+      const { count: pinsCount } = await supabase
+        .from("pins")
+        .select("id", { count: "exact", head: true });
+
+      res.json({
+        summary: {
+          total_doors: pinsCount || 0,
+          total_leads,
+          total_sold,
+          total_completed,
+          conversion_rate: total_leads > 0 ? Math.round((total_sold / total_leads) * 100) : 0,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to get analytics:", error);
+      res.status(500).json({ error: "Failed to get analytics" });
+    }
+  });
+
+  app.get("/api/analytics/reps", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { data: leads, error } = await supabase.from("leads").select("id, status, created_by");
+      if (error) throw error;
+
+      const { data: pins } = await supabase.from("pins").select("id, created_by");
+
+      const repMap = new Map<string, { doors: number; leads: number; sold: number }>();
+
+      (pins || []).forEach((p: any) => {
+        if (!repMap.has(p.created_by)) repMap.set(p.created_by, { doors: 0, leads: 0, sold: 0 });
+        repMap.get(p.created_by)!.doors++;
+      });
+
+      (leads || []).forEach((l: any) => {
+        const email = l.created_by || "unknown";
+        if (!repMap.has(email)) repMap.set(email, { doors: 0, leads: 0, sold: 0 });
+        repMap.get(email)!.leads++;
+        if (l.status === "sold") repMap.get(email)!.sold++;
+      });
+
+      const reps = Array.from(repMap.entries()).map(([email, stats]) => ({
+        rep_email: email,
+        rep_name: email.split("@")[0],
+        ...stats,
+        conversion_rate: stats.leads > 0 ? Math.round((stats.sold / stats.leads) * 100) : 0,
+      }));
+
+      res.json({ reps });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get rep analytics" });
+    }
+  });
+
+  // ========================
+  // User Management
+  // ========================
+
+  app.get("/api/users", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const adminEmails = (process.env.ADMIN_EMAILS || "").split(",").map(e => e.trim()).filter(Boolean);
+      const repEmails = (process.env.REPS_EMAILS || "").split(",").map(e => e.trim()).filter(Boolean);
+
+      const allEmails = [...new Set([...adminEmails, ...repEmails])];
+
+      const { data: pins } = await supabase.from("pins").select("created_by");
+      const { data: leads } = await supabase.from("leads").select("created_by, status");
+
+      const users = allEmails.map(email => {
+        const role = adminEmails.includes(email) ? "admin" : "rep";
+        const userPins = (pins || []).filter((p: any) => p.created_by === email);
+        const userLeads = (leads || []).filter((l: any) => l.created_by === email);
+        const sold = userLeads.filter((l: any) => l.status === "sold").length;
+
+        return {
+          email,
+          name: email.split("@")[0],
+          role,
+          leads_total: userLeads.length,
+          sales_total: sold,
+          doors_total: userPins.length,
+        };
+      });
+
+      res.json({ users });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get users" });
+    }
+  });
+
+  // Get sold leads not yet assigned to any route
+  app.get("/api/leads/unscheduled", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { data: scheduledLeadIds } = await supabase
+        .from("route_stops")
+        .select("lead_id");
+
+      const excludeIds = (scheduledLeadIds || []).map((s: any) => s.lead_id).filter(Boolean);
+
+      let query = supabase.from("leads").select("*").eq("status", "sold");
+
+      if (excludeIds.length > 0) {
+        query = query.not("id", "in", `(${excludeIds.join(",")})`);
+      }
+
+      const { data, error } = await query.order("sold_at", { ascending: false });
+      if (error) throw error;
+
+      res.json({ leads: data || [] });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get unscheduled leads" });
     }
   });
 

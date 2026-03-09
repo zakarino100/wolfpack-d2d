@@ -1,53 +1,32 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
-import { useTheme } from "@/hooks/useTheme";
-import { BorderRadius, Spacing } from "@/constants/theme";
+import { BorderRadius, Spacing, LEAD_STATUSES } from "@/constants/theme";
 import { LeadStatus, TouchOutcome } from "@/types";
 
 interface StatusBadgeProps {
-  status: LeadStatus | TouchOutcome;
+  status: LeadStatus | TouchOutcome | string;
   size?: "sm" | "md";
 }
 
-const STATUS_LABELS: Record<LeadStatus | TouchOutcome, string> = {
-  new: "New",
-  contacted: "Contacted",
-  interested: "Interested",
-  quoted: "Quoted",
-  booked: "Booked",
-  not_interested: "Not Interested",
-  do_not_knock: "Do Not Knock",
-  no_answer: "No Answer",
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  ...LEAD_STATUSES,
+  new: { label: "New", color: "#9CA3AF" },
+  contacted: { label: "Contacted", color: "#3B82F6" },
+  interested: { label: "Interested", color: "#6366F1" },
+  quoted: { label: "Quoted", color: "#F59E0B" },
+  booked: { label: "Booked", color: "#8B5CF6" },
+  no_answer: { label: "No Answer", color: "#9CA3AF" },
+  do_not_knock: { label: "Do Not Knock", color: "#EF4444" },
+  pending: { label: "Pending", color: "#9CA3AF" },
+  en_route: { label: "En Route", color: "#3B82F6" },
+  draft: { label: "Draft", color: "#9CA3AF" },
+  shared: { label: "Shared", color: "#3B82F6" },
+  in_progress: { label: "In Progress", color: "#F59E0B" },
 };
 
 export function StatusBadge({ status, size = "md" }: StatusBadgeProps) {
-  const { theme } = useTheme();
-
-  const getStatusColor = () => {
-    switch (status) {
-      case "new":
-        return theme.statusNew;
-      case "contacted":
-        return theme.statusContacted;
-      case "interested":
-        return theme.statusInterested;
-      case "quoted":
-        return theme.statusQuoted;
-      case "booked":
-        return theme.statusBooked;
-      case "not_interested":
-        return theme.statusNotInterested;
-      case "do_not_knock":
-        return theme.statusDoNotKnock;
-      case "no_answer":
-        return theme.statusNoAnswer;
-      default:
-        return theme.textSecondary;
-    }
-  };
-
-  const color = getStatusColor();
+  const config = STATUS_CONFIG[status] || { label: status?.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase()) || "Unknown", color: "#9CA3AF" };
   const isSmall = size === "sm";
 
   return (
@@ -55,21 +34,21 @@ export function StatusBadge({ status, size = "md" }: StatusBadgeProps) {
       style={[
         styles.badge,
         {
-          backgroundColor: `${color}20`,
+          backgroundColor: `${config.color}20`,
           paddingHorizontal: isSmall ? Spacing.sm : Spacing.md,
           paddingVertical: isSmall ? 2 : 4,
         },
       ]}
     >
-      <View style={[styles.dot, { backgroundColor: color }]} />
+      <View style={[styles.dot, { backgroundColor: config.color }]} />
       <ThemedText
         type="small"
         style={[
           styles.label,
-          { color, fontSize: isSmall ? 11 : 13 },
+          { color: config.color, fontSize: isSmall ? 11 : 13 },
         ]}
       >
-        {STATUS_LABELS[status]}
+        {config.label}
       </ThemedText>
     </View>
   );

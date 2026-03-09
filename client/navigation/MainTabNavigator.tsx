@@ -6,6 +6,7 @@ import { Platform, StyleSheet } from "react-native";
 
 import CanvassScreen from "@/screens/CanvassScreen";
 import LeadsScreen from "@/screens/LeadsScreen";
+import RouteScreen from "@/screens/RouteScreen";
 import FollowupsScreen from "@/screens/FollowupsScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
@@ -15,6 +16,7 @@ import { useScreenOptions } from "@/hooks/useScreenOptions";
 export type MainTabParamList = {
   CanvassTab: undefined;
   LeadsTab: undefined;
+  RouteTab: undefined;
   FollowupsTab: undefined;
   ProfileTab: undefined;
 };
@@ -71,6 +73,17 @@ export default function MainTabNavigator() {
           headerTitle: () => <HeaderTitle title="Leads" />,
           tabBarIcon: ({ color, size }) => (
             <Feather name="users" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="RouteTab"
+        component={RouteScreen}
+        options={{
+          title: "Route",
+          headerTitle: () => <HeaderTitle title="Route" />,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="navigation" size={size} color={color} />
           ),
         }}
       />

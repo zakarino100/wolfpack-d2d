@@ -43,13 +43,11 @@ import { RootStackParamList } from "@/navigation/RootStackNavigator";
 type RouteProps = RouteProp<RootStackParamList, "LeadDetail">;
 
 const OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
-  { value: "no_answer", label: "No Answer" },
-  { value: "contacted", label: "Contacted" },
-  { value: "interested", label: "Interested" },
-  { value: "quoted", label: "Quoted" },
-  { value: "booked", label: "Booked" },
+  { value: "not_home", label: "Not Home" },
   { value: "not_interested", label: "Not Interested" },
-  { value: "do_not_knock", label: "Do Not Knock" },
+  { value: "follow_up", label: "Follow Up" },
+  { value: "sold", label: "Sold" },
+  { value: "completed", label: "Completed" },
 ];
 
 export default function LeadDetailScreen() {

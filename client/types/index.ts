@@ -24,27 +24,30 @@ export interface Lead {
   followup_channel: FollowupChannel | null;
   followup_priority: FollowupPriority | null;
   do_not_knock: boolean;
+  preferred_day: string | null;
+  preferred_time: string | null;
+  scheduling_notes: string | null;
+  sold_at: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  notes: string | null;
 }
 
 export type LeadStatus =
-  | "new"
-  | "contacted"
-  | "interested"
-  | "quoted"
-  | "booked"
+  | "not_home"
   | "not_interested"
-  | "do_not_knock";
+  | "follow_up"
+  | "sold"
+  | "completed";
 
 export type TouchType = "knock" | "call" | "text" | "note";
 
 export type TouchOutcome =
-  | "no_answer"
-  | "contacted"
-  | "interested"
-  | "quoted"
-  | "booked"
+  | "not_home"
   | "not_interested"
-  | "do_not_knock";
+  | "follow_up"
+  | "sold"
+  | "completed";
 
 export type FollowupChannel = "call" | "text" | "knock";
 
@@ -158,5 +161,61 @@ export interface Pin {
   longitude: number;
   created_by: string;
   business_unit: string;
+  status: string | null;
   lead?: Lead | null;
+}
+
+export interface Route {
+  id: string;
+  admin_id: string;
+  rep_id: string | null;
+  rep_email: string | null;
+  rep_name: string | null;
+  name: string | null;
+  date: string;
+  status: RouteStatus;
+  created_at: string;
+  stops?: RouteStop[];
+}
+
+export type RouteStatus = "draft" | "shared" | "in_progress" | "completed";
+
+export interface RouteStop {
+  id: string;
+  route_id: string;
+  lead_id: string;
+  stop_order: number;
+  arrival_window: string | null;
+  notes: string | null;
+  status: StopStatus;
+  lead?: Lead | null;
+}
+
+export type StopStatus = "pending" | "en_route" | "completed";
+
+export interface RepLocation {
+  id: string;
+  rep_id: string;
+  rep_email: string;
+  rep_name: string | null;
+  lat: number;
+  lng: number;
+  recorded_at: string;
+}
+
+export interface AnalyticsSummary {
+  total_doors: number;
+  total_leads: number;
+  total_sold: number;
+  total_completed: number;
+  conversion_rate: number;
+}
+
+export interface RepAnalytics {
+  rep_email: string;
+  rep_name: string | null;
+  doors: number;
+  leads: number;
+  sold: number;
+  conversion_rate: number;
 }
