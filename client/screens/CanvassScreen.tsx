@@ -12,6 +12,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import * as Location from "expo-location";
 import { MapViewWrapper, MapMarker } from "@/components/MapViewWrapper";
 import * as ImagePicker from "expo-image-picker";
@@ -85,6 +86,7 @@ export default function CanvassScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<NavigationProp>();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const mapRef = useRef<any>(null);
 
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
@@ -675,28 +677,31 @@ export default function CanvassScreen() {
         </Animated.View>
       ) : null}
 
-      <Pressable
-        onPress={handleAddPinPress}
-        style={[
-          styles.addPinBtn,
-          { 
-            backgroundColor: canvassMode === "add_pin" ? theme.error : theme.primary,
-            bottom: insets.bottom + Spacing.xl + (showForm ? SCREEN_HEIGHT * 0.4 : 60),
-          },
-          Shadows.lg,
-        ]}
-      >
-        <Feather 
-          name={canvassMode === "add_pin" ? "x" : "plus"} 
-          size={24} 
-          color="white" 
-        />
-        {canvassMode !== "add_pin" ? (
-          <ThemedText type="body" style={{ color: "white", fontWeight: "600", marginLeft: Spacing.sm }}>
-            Add Pin
-          </ThemedText>
-        ) : null}
-      </Pressable>
+      {showForm ? null : (
+        <Pressable
+          onPress={handleAddPinPress}
+          style={[
+            styles.addPinBtn,
+            { 
+              backgroundColor: canvassMode === "add_pin" ? theme.error : theme.primary,
+              bottom: tabBarHeight + Spacing.lg,
+            },
+            Shadows.lg,
+          ]}
+          testID="button-add-pin"
+        >
+          <Feather 
+            name={canvassMode === "add_pin" ? "x" : "plus"} 
+            size={24} 
+            color="white" 
+          />
+          {canvassMode !== "add_pin" ? (
+            <ThemedText type="body" style={{ color: "white", fontWeight: "600", marginLeft: Spacing.sm }}>
+              Drop Pin
+            </ThemedText>
+          ) : null}
+        </Pressable>
+      )}
 
       {previewPin ? (
         <Animated.View
@@ -1059,6 +1064,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     borderRadius: BorderRadius.full,
+    zIndex: 10,
+    elevation: 5,
   },
   repInfo: {
     flexDirection: "row",
