@@ -1,0 +1,504 @@
+Healthy Home Field App — Full Build Prompt
+Project Overview
+Rebuild and extend the existing Healthy Home door-to-door sales rep app into a production-ready V1. This is a React Native app (Expo bare workflow) with an Express.js + TypeScript backend connected to Supabase (PostgreSQL). The app serves two user types: Reps (field canvassers) and Admins (owners/managers).
+
+Tech Stack
+Frontend: React Native, Expo bare workflow, TypeScript
+Backend: Express.js, TypeScript, tsx, port 5000
+Database: Supabase (PostgreSQL)
+Auth: Google OAuth + email/password, JWT tokens
+Maps: React Native Maps + Google Maps API
+Offline: AsyncStorage queue — writes saved locally, synced to Supabase when signal returns
+Push Notifications: Expo Notifications
+SMS: React Native's Linking API (opens native SMS composer)
+Styling: NativeWind (Tailwind for React Native)
+
+Database Schema (Supabase)
+Create these tables:
+sql-- Users
+users (
+  id uuid primary key,
+  email text unique,
+  name text,
+  role text check (role in ('rep', 'admin')),
+  google_id text,
+  avatar_url text,
+  created_at timestamptz default now()
+)
+
+-- Leads
+leads (
+  id uuid primary key,
+  rep_id uuid references users(id),
+  address text not null,
+  lat float not null,
+  lng float not null,
+  status text check (status in ('not_home', 'not_interested', 'follow_up', 'sold', 'completed')),
+  services_interested text[], -- ['house_wash', 'cement_cleaning', etc]
+  contact_name text,
+  contact_phone text,
+  notes text,
+  follow_up_date timestamptz,
+  -- Scheduling preferences captured during sale
+  preferred_day text, -- 'monday', 'tuesday', etc
+  preferred_time text, -- 'morning', 'afternoon', 'evening'
+  scheduling_notes text,
+  sold_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+)
+
+-- Routes
+routes (
+  id uuid primary key,
+  admin_id uuid references users(id),
+  rep_id uuid references users(id),
+  name text,
+  date date not null,
+  status text check (status in ('draft', 'shared', 'in_progress', 'completed')),
+  created_at timestamptz default now()
+)
+
+-- Route stops (jobs on a route, ordered)
+route_stops (
+  id uuid primary key,
+  route_id uuid references routes(id) on delete cascade,
+  lead_id uuid references leads(id),
+  stop_order int not null,
+  arrival_window text, -- e.g. '9am-11am'
+  notes text -- admin notes for this stop only
+)
+
+-- Rep GPS tracking
+rep_locations (
+  id uuid primary key,
+  rep_id uuid references users(id),
+  lat float,
+  lng float,
+  recorded_at timestamptz default now()
+)
+
+-- Offline sync queue (local only, not Supabase)
+-- Stored in AsyncStorage as JSON array of pending mutations
+```
+
+---
+
+## Authentication
+
+Support two login methods:
+
+**Google OAuth:**
+- Uses existing Google OAuth flow with JWT
+- On first login, create user record with role = 'rep' by default
+- Admin role must be manually set in Supabase (no self-service admin)
+
+**Email + Password:**
+- Standard email/password with Supabase Auth
+- Same role logic applies
+
+**JWT middleware** on all protected Express routes checking role.
+
+**On app launch:**
+- If no token → Login screen
+- If token + role = rep → Rep app
+- If token + role = admin → Admin dashboard
+
+---
+
+## Rep App (field-facing)
+
+### Bottom Tab Navigation
+1. Map
+2. My Leads
+3. My Route
+4. Calendar / Follow-ups
+5. Profile
+
+---
+
+### Tab 1: Map
+
+Full-screen map centered on rep's current GPS location.
+
+**Pin colors by status:**
+- Gray — not_home
+- Red — not_interested
+- Yellow — follow_up
+- Green — sold
+- Teal (#4A9B8E) — completed
+
+**Dropping a pin:**
+- Long press anywhere on map → pin drops at that location → Lead Form sheet slides up immediately
+- Alternatively tap "+" FAB button → opens address search → drops pin at searched address
+
+**Tapping an existing pin:**
+- Bottom sheet slides up with lead summary
+- Shows: name, address, status badge, services, notes preview
+- Buttons: Edit Lead / Start Follow-up / Mark Complete
+
+**Offline behavior:**
+- If no signal, pin drops and Lead Form saves to AsyncStorage queue
+- A banner shows "Offline — X items pending sync"
+- When signal returns, queue auto-syncs to Supabase in background
+- Synced pins replace local queue items
+
+**Rep's own location:**
+- Blue pulsing dot showing current position
+- Location updates POST to `rep_locations` table every 60 seconds while app is foregrounded
+
+---
+
+### Lead Form (bottom sheet, slides up on pin drop)
+
+Fields:
+- Contact Name
+- Contact Phone
+- Services Interested (multi-select chips): House Wash, Cement Cleaning, Roof Wash, Gutter Cleaning, Window Cleaning, Deck Staining, Driveway Sealing, Holiday Lighting, Other
+- Lead Status (select): Not Home / Not Interested / Follow-Up / Sold
+- Notes (free text)
+- Follow-Up Date (date picker — only shows if status = Follow-Up)
+- **If status = Sold, show scheduling preference fields:**
+  - Preferred Day (Mon/Tue/Wed/Thu/Fri/Sat)
+  - Preferred Time (Morning / Afternoon / Evening)
+  - Scheduling Notes (free text)
+- Address (auto-filled from pin location via reverse geocode, editable)
+
+Sold leads trigger a push notification to all admin devices: "New job sold — [address] by [rep name]"
+
+---
+
+### Tab 2: My Leads
+
+List view of all leads created by this rep.
+
+- Filter bar: All / Follow-Up / Sold / Not Home / Not Interested
+- Sort: Newest / Follow-up Date / Status
+- Each row: address, status badge (color-coded), contact name, services, follow-up date if set
+- Tap row → Lead detail screen with full edit capability
+- Search bar to find by address or name
+
+---
+
+### Tab 3: My Route
+
+Shows the route assigned to this rep for today (or next upcoming route).
+
+- List of stops in order with stop number, address, arrival window, admin notes
+- Tap stop → opens Apple Maps / Google Maps with directions to that address
+- Status toggle on each stop: Pending / En Route / Completed
+- If no route assigned today → empty state: "No route scheduled. Check back soon."
+
+---
+
+### Tab 4: Calendar / Follow-Ups
+
+- Monthly calendar view
+- Dots on dates that have follow-ups scheduled
+- Tap a date → list of follow-ups for that day
+- Each follow-up shows: address, contact name, services, notes
+- Tap follow-up → opens full lead detail
+- "Mark Contacted" button on each — updates status and clears follow-up date
+
+---
+
+### Tab 5: Profile
+
+- Avatar, name, email
+- Today's stats: Doors knocked (pins dropped today) / Leads created / Sold today
+- Logout button
+- Toggle: "Share my location with admin" (on/off — respects privacy)
+
+---
+
+## Admin Dashboard
+
+Separate navigation stack shown when role = admin.
+
+### Bottom Tab Navigation
+1. Live Map
+2. Route Builder
+3. All Leads
+4. Analytics
+5. Team
+
+---
+
+### Tab 1: Live Map (Admin)
+
+Full-screen map showing everything:
+
+**All leads across all reps** — same color-coded pins as rep map
+- Filter panel: by rep, by status, by service, by date range
+- Tap any pin → lead detail with full info including rep who created it
+- Edit any lead from admin map
+
+**Rep location dots:**
+- Each active rep shown as colored avatar dot on map
+- Dot only shows if rep has "Share my location" enabled
+- Tap rep dot → shows rep name, last updated time, leads created today
+
+**Coverage heatmap toggle:**
+- Button to overlay a heatmap showing pin density across the area
+
+---
+
+### Tab 2: Route Builder
+
+This is the core admin tool for scheduling sold jobs.
+
+**Main view: Calendar**
+- Week view calendar (horizontal scroll for days)
+- Each day shows a column of assigned route stops
+- Unscheduled sold jobs appear in a sidebar panel on the right (or bottom sheet on mobile)
+- Each unscheduled job card shows: address, contact name, services, scheduling preferences (preferred day + time captured during sale), rep who sold it
+
+**Building a route:**
+1. Tap a day on the calendar
+2. "Add Stop" button opens a list of all unscheduled sold leads
+3. Each lead shows scheduling preferences to guide placement
+4. Drag and drop stops to reorder within a day
+5. Set arrival window for each stop (e.g. 9am–11am)
+6. Add admin-only notes per stop
+7. Assign route to a rep (dropdown of all reps)
+8. Save as Draft or Publish
+
+**Published routes:**
+- Rep immediately sees it in their "My Route" tab
+- Route status updates: Draft → Shared → In Progress → Completed
+
+**Share via SMS button:**
+Every route has a share button that opens the native SMS composer pre-filled with:
+```
+Healthy Home — Route for [Date]
+Assigned to: [Rep Name]
+
+Stop 1 — [Address]
+Arrival: [Window]
+Services: [List]
+Customer: [Contact Name] ([Phone])
+Notes: [Admin notes for this stop]
+
+Stop 2 — [Address]
+...
+
+Total stops: X
+Questions? Call the office.
+No pricing info included. Ever.
+
+Tab 3: All Leads
+Same as rep "My Leads" but shows all leads from all reps.
+
+Filter by rep, status, service, date range, city
+Bulk actions: assign to route, change status, export CSV
+Search by address, name, phone
+Tap lead → full detail + edit + assign to route directly
+
+
+Tab 4: Analytics
+Today card:
+
+Total doors knocked (all reps)
+Total leads created
+Total sold
+Conversion rate (sold / total leads)
+
+Per-rep breakdown:
+
+Table: Rep name / Doors / Leads / Sold / Conversion % / Avg per hour
+Tap rep → rep detail with their map activity and lead history
+
+Charts:
+
+Leads by status (donut chart)
+Sales by service type (bar chart)
+Daily activity over last 30 days (line chart)
+
+Date range selector: Today / This Week / This Month / Custom
+
+Tab 5: Team
+
+List of all reps
+Each rep: name, avatar, email, date joined, leads total, sales total
+Tap rep → rep profile with stats + all their leads on a mini map
+Invite new rep button → sends email invite
+Deactivate rep (doesn't delete data, just blocks login)
+Role management: promote rep to admin
+
+
+Offline Architecture
+AsyncStorage queue structure:
+typescriptinterface OfflineQueueItem {
+  id: string; // local temp ID
+  type: 'create_lead' | 'update_lead' | 'update_stop_status';
+  payload: object;
+  created_at: string;
+  synced: boolean;
+}
+```
+
+- All mutations go through a `useOfflineQueue` hook
+- Hook checks network status (NetInfo)
+- If online: POST directly to API, mark synced
+- If offline: save to AsyncStorage queue
+- Background sync: NetInfo `addEventListener` triggers queue flush on reconnect
+- Conflict resolution: server timestamp wins for updates; local creates always push through
+
+---
+
+## Push Notifications
+
+Using Expo Notifications (works in bare workflow):
+
+Triggers:
+- **New sold lead** → notify all admins immediately
+- **Follow-up reminder** → notify rep 1 hour before follow-up time
+- **Route published** → notify assigned rep
+- **Route stop marked complete** → notify admin
+
+---
+
+## API Routes (Express)
+```
+POST   /auth/google          → Google OAuth
+POST   /auth/login           → email+password login
+POST   /auth/register        → email+password register
+GET    /auth/me              → current user
+
+GET    /leads                → all leads (admin) or own leads (rep)
+POST   /leads                → create lead
+PUT    /leads/:id            → update lead
+DELETE /leads/:id            → delete lead (admin only)
+
+GET    /routes               → routes (admin: all, rep: assigned to them)
+POST   /routes               → create route (admin only)
+PUT    /routes/:id           → update route (admin only)
+POST   /routes/:id/stops     → add stop to route
+PUT    /routes/:id/stops/:stopId → update stop order/status
+DELETE /routes/:id/stops/:stopId → remove stop
+
+POST   /rep-locations        → update rep GPS position
+GET    /rep-locations/live   → all active rep locations (admin only)
+
+GET    /analytics/summary    → dashboard stats
+GET    /analytics/reps       → per-rep breakdown
+
+GET    /users                → all users (admin only)
+PUT    /users/:id/role       → change role (admin only)
+DELETE /users/:id            → deactivate user (admin only)
+```
+
+All routes protected by JWT middleware. Role-checked where noted.
+
+---
+
+## Folder Structure
+```
+/app
+  /screens
+    /auth
+      LoginScreen.tsx
+      RegisterScreen.tsx
+    /rep
+      MapScreen.tsx
+      LeadsScreen.tsx
+      RouteScreen.tsx
+      CalendarScreen.tsx
+      ProfileScreen.tsx
+    /admin
+      AdminMapScreen.tsx
+      RouteBuilderScreen.tsx
+      AllLeadsScreen.tsx
+      AnalyticsScreen.tsx
+      TeamScreen.tsx
+  /components
+    LeadForm.tsx
+    LeadCard.tsx
+    PinCallout.tsx
+    RouteStopCard.tsx
+    StatusBadge.tsx
+    OfflineBanner.tsx
+    RepAvatar.tsx
+    StatsCard.tsx
+  /hooks
+    useOfflineQueue.ts
+    useAuth.ts
+    useLeads.ts
+    useRoutes.ts
+    useRepLocation.ts
+    useNotifications.ts
+  /lib
+    supabase.ts
+    api.ts
+    offlineQueue.ts
+    notifications.ts
+  /navigation
+    RootNavigator.tsx
+    RepNavigator.tsx
+    AdminNavigator.tsx
+  /types
+    index.ts
+  /config
+    constants.ts  ← all env vars, colors, service list
+
+/server
+  /routes
+    auth.ts
+    leads.ts
+    routes.ts
+    repLocations.ts
+    analytics.ts
+    users.ts
+  /middleware
+    auth.ts
+    roleCheck.ts
+  /lib
+    supabase.ts
+  index.ts
+
+Config / Constants File
+Single file /app/config/constants.ts:
+typescriptexport const SERVICES = [
+  'House Wash',
+  'Cement Cleaning',
+  'Roof Wash',
+  'Gutter Cleaning',
+  'Window Cleaning',
+  'Deck Staining',
+  'Driveway Sealing',
+  'Holiday Lighting',
+  'Other'
+];
+
+export const LEAD_STATUSES = {
+  not_home: { label: 'Not Home', color: '#9CA3AF' },
+  not_interested: { label: 'Not Interested', color: '#EF4444' },
+  follow_up: { label: 'Follow Up', color: '#F59E0B' },
+  sold: { label: 'Sold', color: '#22C55E' },
+  completed: { label: 'Completed', color: '#4A9B8E' },
+};
+
+export const BRAND = {
+  primary: '#4A9B8E',
+  dark: '#1B3A4B',
+  light: '#C8DDD5',
+  bg: '#F7FAF9',
+};
+
+Key Rules
+
+Never expose pricing in any SMS route share
+Admin can see and edit all data; reps can only see and edit their own leads
+Location sharing is opt-in for reps — never force it
+Offline queue must never lose data — if sync fails, retry with exponential backoff
+All sold lead scheduling preferences must be visible in route builder
+Route SMS share must use native SMS composer via Linking API — no third party SMS service needed
+
+
+Deliverables
+
+Full React Native Expo bare workflow project
+Full Express.js TypeScript server
+Supabase schema SQL file ready to run
+README with setup instructions, env vars needed, and how to run both app and server
+Single constants.ts config file for all services, colors, and statuses
