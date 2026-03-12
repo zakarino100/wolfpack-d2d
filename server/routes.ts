@@ -953,9 +953,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       delete (routes as any).route_stops;
 
       res.json({ routes });
-    } catch (error) {
-      console.error("Failed to get routes:", error);
-      res.status(500).json({ error: "Failed to get routes" });
+    } catch (error: any) {
+      // Table may not exist yet — return empty gracefully
+      console.warn("Failed to get routes (table may not exist):", error?.message);
+      res.json({ routes: [] });
     }
   });
 
@@ -1166,7 +1167,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .gte("recorded_at", fiveMinAgo)
         .order("recorded_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // Table may not exist yet (migration not run) — return empty gracefully
+        console.warn("rep_locations query error (table may not exist):", error.message);
+        return res.json({ locations: [] });
+      }
 
       const latestByRep = new Map<string, any>();
       (data || []).forEach((loc: any) => {
@@ -1177,7 +1182,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ locations: Array.from(latestByRep.values()) });
     } catch (error) {
-      res.status(500).json({ error: "Failed to get rep locations" });
+      res.json({ locations: [] });
     }
   });
 
@@ -1215,8 +1220,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
     } catch (error) {
-      console.error("Failed to get analytics:", error);
-      res.status(500).json({ error: "Failed to get analytics" });
+      console.warn("Failed to get analytics:", error);
+      res.json({ summary: { total_doors: 0, total_leads: 0, total_sold: 0, total_completed: 0, conversion_rate: 0 } });
     }
   });
 

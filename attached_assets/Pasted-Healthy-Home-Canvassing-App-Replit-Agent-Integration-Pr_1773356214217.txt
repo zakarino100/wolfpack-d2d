@@ -1,0 +1,323 @@
+Healthy Home Canvassing App — Replit Agent Integration Prompt
+Version: 1.0
+Purpose: Connect the existing Healthy Home canvassing app to the Healthy Home backend so both systems stay fully synchronized in real time or near-real time.
+
+READ THIS FIRST — Instructions for Replit Agent
+You are working on the existing Healthy Home canvassing app.
+
+A separate Healthy Home backend / business operating system is being built (or has just been built) to handle:
+
+leads
+customers
+jobs
+review workflows
+reporting
+dashboards
+business metrics
+Your job is to integrate the canvassing app with that backend so the canvassing app becomes a synced field-sales interface for the system.
+
+Core requirement
+The canvassing app and backend must be cross-pollinated:
+
+if a canvasser updates a lead in the canvassing app, the backend reflects it
+if an admin changes lead status, job amount, follow-up date, notes, or customer info in the backend, the canvassing app reflects it
+both systems should stay aligned around the same records
+avoid duplicate disconnected state
+Main goal
+Turn the canvassing app into a frontend/client layer for the backend, not a separate silo.
+
+That means:
+
+The backend should be the source of truth
+The canvassing app should read from and write to backend APIs
+Updates must sync both directions
+Data model mappings must be clean and explicit
+Conflict handling must be sensible
+The canvassing app should remain fast and usable in the field
+First task: inspect the current canvassing app
+Before implementing anything:
+
+Audit the current canvassing app
+Identify:
+current frontend stack
+whether it has its own backend
+whether it uses local storage, Replit DB, Supabase, or another data store
+current lead model
+current canvassing/session tracking model
+current job/customer model if any
+current API structure if any
+Summarize:
+what data is local-only
+what data already maps well to the backend
+what needs to be refactored for sync
+where duplicate state currently exists
+Then implement integration in phases
+Do not rebuild the app from scratch unless absolutely necessary.
+
+Integration principles
+1. Single source of truth
+The backend system is canonical for:
+
+leads
+customers
+jobs
+statuses
+job amounts
+follow-up dates
+review workflow status
+daily metrics rollups
+The canvassing app should not maintain a separate permanent copy of the truth unless required for offline support.
+
+2. Two-way synchronization
+If a change happens in either place, it should reflect in the other.
+
+Examples:
+
+lead marked sold in canvassing app → backend updates immediately
+admin changes lead from follow-up to sold in backend → canvassing app reflects updated status
+job amount edited in backend → canvassing app shows new amount
+canvasser adds notes in app → backend stores them
+customer phone number updated in backend → canvassing app sees latest value
+3. Avoid duplicate business logic
+Do not re-implement backend business rules inside the canvassing app unless needed for UX validation.
+
+For example:
+
+final lead status logic should live in backend
+conversion logic should live in backend
+job creation logic should live in backend
+review workflow logic should live in backend
+The canvassing app should call backend APIs for these actions.
+
+4. Field usability matters
+The canvassing app must remain:
+
+mobile-friendly
+fast
+simple
+resilient to flaky connection if possible
+Required implementation goals
+Phase 1 — Map the canvassing app to backend entities
+Identify and map canvassing app data to backend entities.
+
+At minimum, map:
+
+canvassing session/log → canvassing log
+lead → backend lead
+sold lead → backend lead + customer + job flow
+follow-up → backend lead follow-up date/status
+notes → backend lead/customer/job notes
+revenue sold → backend lead/job values
+Produce a clear mapping table.
+
+Example:
+
+canvassing app prospect.status → backend Lead.status
+canvassing app sale.amount → backend Lead.quoteAmount or Job.soldPrice
+canvassing app appointmentDate → backend Job.scheduledAt
+Use backend IDs as the persistent identifiers whenever possible.
+
+Phase 2 — Backend API integration
+Update the canvassing app so it reads and writes through the backend API.
+
+Required integrations:
+
+fetch leads from backend
+create leads in backend
+update lead status in backend
+update follow-up date in backend
+convert sold leads using backend conversion flow
+fetch jobs relevant to canvassers
+fetch customer details when needed
+fetch current canvassing metrics if relevant
+Important
+Do not leave the canvassing app writing to a separate local database as the primary system if backend integration exists.
+
+If local persistence is currently present, either:
+
+phase it out
+or make it a temporary offline cache only
+Phase 3 — Bidirectional sync behavior
+Implement sync so changes from the backend propagate into the canvassing app.
+
+Preferred options, in order:
+
+realtime subscriptions / websocket if supported by current stack
+polling-based refresh at sensible intervals
+manual refresh fallback
+Sync requirements
+If these fields change in the backend, the canvassing app must reflect them:
+
+lead status
+quote amount
+sold amount
+scheduled date
+follow-up date
+customer contact info
+notes
+assigned technician if relevant
+job status
+If the canvassing app changes these fields, send updates immediately to backend.
+
+Goal
+No stale records sitting in the canvassing app for long periods.
+
+Phase 4 — Conflict handling
+Design a sensible conflict strategy.
+
+Minimum requirement:
+
+use backend updatedAt timestamps
+when syncing, prefer the newest valid update
+log sync conflicts if necessary
+avoid silent overwrites when possible
+If real-time collaboration is too complex for v1, implement a practical model like:
+
+last write wins
+with visible updated timestamp
+and sync error logging
+Document the chosen approach.
+
+Phase 5 — Offline / field mode (if practical)
+If the canvassing app is used heavily in the field and connection may be spotty, support a lightweight offline-safe approach.
+
+If implemented:
+
+allow temporary local queueing of actions
+sync queued changes when connection returns
+show sync state in UI
+do not create duplicate records accidentally
+If offline support is too much for current phase, at least:
+
+fail gracefully
+show save/sync errors clearly
+allow retry
+Data flows to support
+Flow 1 — New lead from canvassing app
+canvasser creates lead in canvassing app
+app sends to backend
+backend returns canonical lead record with id
+canvassing app stores backend id
+lead appears in both systems
+Flow 2 — Lead updated in canvassing app
+canvasser changes status / amount / notes / follow-up
+app PATCHes backend
+backend returns updated record
+app updates local UI state from backend response
+Flow 3 — Lead updated in backend admin/dashboard
+admin changes lead status / amount / notes / schedule
+backend saves change
+canvassing app receives update through realtime sync or polling
+canvassing app refreshes local state
+Flow 4 — Lead sold
+canvasser marks lead sold
+canvassing app calls backend sell/convert flow
+backend converts lead as needed into customer/job records
+canvassing app reflects sold state and any linked job details
+Flow 5 — Job or amount changed later
+backend admin edits job amount, status, or schedule
+canvassing app should show the latest values on refresh/sync
+Required UI/UX changes in the canvassing app
+Add or improve UI indicators for:
+
+sync status
+last updated time
+save in progress
+save failed / retry
+stale data warning if needed
+At minimum, a canvasser should be able to see:
+
+whether data successfully synced
+whether a lead/job is current
+whether follow-up changes were saved
+Keep it lightweight.
+
+Metrics integration
+The canvassing app must push all field activity to the backend so that backend reporting stays accurate.
+
+At minimum, make sure these feed the backend correctly:
+
+doors knocked
+people reached
+good conversations
+quotes
+closes
+revenue sold
+bundle count
+driveway add-on count
+canvasser notes
+neighborhood / route
+Do not keep these metrics trapped only inside the canvassing app.
+
+The backend daily reporting system depends on this data.
+
+Suggested technical approach
+Use the backend as the authoritative API and integrate the canvassing app with:
+
+REST endpoints for CRUD/update flows
+realtime subscriptions or websockets if available
+fallback polling if realtime is not available
+optimistic UI only where safe
+backend IDs as canonical record IDs
+updated timestamps for reconciliation
+If the current stack uses Supabase and realtime is available, that is a good option.
+If not, implement sane polling and explicit refresh logic.
+
+Required outputs from Replit Agent
+I want you to:
+
+audit the current canvassing app
+explain the current architecture and where data lives
+show the mapping between canvassing app entities and backend entities
+identify what needs to change for true synchronization
+implement backend integration
+implement bidirectional sync behavior
+add sync status indicators to the app
+document the sync model and conflict strategy
+provide test cases for:
+create lead
+update lead in canvassing app
+update lead in backend
+mark lead sold
+edit job amount in backend and reflect in canvassing app
+Important design rules
+Do not create a disconnected duplicate backend inside the canvassing app
+Do not duplicate business logic already owned by the backend
+Do not silently overwrite fresher data without using timestamps
+Do not prioritize styling over data correctness
+Keep the app practical and usable for real canvassing in the field
+Nice-to-have features if practical
+If they fit naturally without overcomplicating v1:
+
+local offline queue for pending updates
+manual “sync now” button
+record-level sync badges
+conflict log for debugging
+auto-refresh of active canvassing view
+Definition of done
+The integration is complete when:
+
+canvassing app reads core lead/job data from backend
+canvassing app writes changes to backend
+backend changes appear in canvassing app
+lead status changes sync both directions
+job amount changes sync both directions where relevant
+follow-up dates and notes sync both directions
+canvassing metrics feed backend reporting correctly
+sync state is visible in the canvassing app
+stale/disconnected duplicate data is reduced or eliminated
+sync behavior is documented clearly
+Final instruction to Replit Agent
+Before making major changes, first return:
+
+a concise audit of the current canvassing app
+the proposed integration architecture
+the entity mapping table
+the sync strategy
+the implementation plan in phases
+Then proceed phase by phase.
+
+Short note I’d add when you paste it
+If you want, prepend this one-liner before the prompt:
+
+“Important: the canvassing app should become a field-sales client of the Healthy Home backend, not a separate source of truth.”
