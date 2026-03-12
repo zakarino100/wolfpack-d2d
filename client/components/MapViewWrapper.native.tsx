@@ -1,5 +1,6 @@
 import React, { forwardRef } from "react";
-import { View, StyleSheet } from "react-native";
+import { StyleSheet, Platform } from "react-native";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 
 interface MapViewWrapperProps {
   children?: React.ReactNode;
@@ -18,23 +19,28 @@ interface MapViewWrapperProps {
   userInterfaceStyle?: "dark" | "light";
 }
 
-export const MapViewWrapper = forwardRef<View, MapViewWrapperProps>(
-  ({ children, style }, ref) => {
+export const MapViewWrapper = forwardRef<MapView, MapViewWrapperProps>(
+  (props, ref) => {
+    const { children, style, ...restProps } = props;
     return (
-      <View ref={ref} style={[styles.map, style]}>
+      <MapView
+        ref={ref}
+        style={[styles.map, style]}
+        provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+        {...restProps}
+      >
         {children}
-      </View>
+      </MapView>
     );
   }
 );
 
 MapViewWrapper.displayName = "MapViewWrapper";
 
-export const MapMarker = (_props: any) => null;
+export const MapMarker = Marker;
 
 const styles = StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#C8DDD5",
   },
 });

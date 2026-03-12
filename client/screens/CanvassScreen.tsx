@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -345,13 +345,54 @@ export default function CanvassScreen() {
     }
   };
 
-  const handleAddPinPress = () => {
+  const handleAddPinPress = async () => {
     if (canvassMode === "add_pin") {
       setCanvassMode("view");
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      return;
+    }
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    if (Platform.OS === "web") {
+      // On web there's no tappable map — open form at current GPS location immediately
+      setCanvassMode("view");
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        let lat = region.latitude;
+        let lng = region.longitude;
+        if (status === "granted") {
+          try {
+            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            lat = loc.coords.latitude;
+            lng = loc.coords.longitude;
+          } catch {}
+        }
+        setSelectedLocation({ latitude: lat, longitude: lng });
+        setAddress({ address_line1: "Looking up address...", city: "", state: "", zip: "", latitude: lat, longitude: lng });
+        setShowForm(true);
+        setGeocoding(true);
+        const addressData = await reverseGeocode(lat, lng);
+        const finalAddress = addressData || {
+          address_line1: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+          city: "", state: "", zip: "", latitude: lat, longitude: lng,
+        };
+        setAddress(finalAddress);
+        setGeocoding(false);
+        const existing = await checkExistingLead(finalAddress);
+        setExistingLead(existing);
+        if (existing) {
+          setHomeownerName(existing.homeowner_name || "");
+          setPhone(existing.phone || "");
+          setEmail(existing.email || "");
+          setServicesInterested(existing.services_interested || []);
+        }
+      } catch {
+        setGeocoding(false);
+        Alert.alert("Location Error", "Could not get your location. Please enable location access.");
+      }
     } else {
       setCanvassMode("add_pin");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   };
 
@@ -636,6 +677,20 @@ export default function CanvassScreen() {
         )}
       </MapViewWrapper>
 
+      {Platform.OS === "web" && !showForm ? (
+        <View style={styles.webMapOverlay} pointerEvents="none">
+          <View style={[styles.webMapHint, { backgroundColor: `${theme.primary}CC` }]}>
+            <Feather name="map-pin" size={20} color="white" />
+            <ThemedText type="body" style={{ color: "white", fontWeight: "600", marginLeft: Spacing.sm }}>
+              Tap "Drop Pin" to log a door
+            </ThemedText>
+          </View>
+          <ThemedText type="small" style={[styles.webMapSubhint, { color: theme.textSecondary }]}>
+            Use Expo Go on your phone for the full map experience
+          </ThemedText>
+        </View>
+      ) : null}
+
       <View style={[styles.searchContainer, { top: insets.top + Spacing.md }]}>
         <View style={[styles.searchBar, { backgroundColor: theme.backgroundRoot }, Shadows.md]}>
           <Feather name="search" size={20} color={theme.textSecondary} />
@@ -684,7 +739,7 @@ export default function CanvassScreen() {
             styles.addPinBtn,
             { 
               backgroundColor: canvassMode === "add_pin" ? theme.error : theme.primary,
-              bottom: tabBarHeight + Spacing.lg,
+              bottom: Math.max(tabBarHeight, insets.bottom + 49) + Spacing.lg,
             },
             Shadows.lg,
           ]}
@@ -1137,6 +1192,27 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+  },
+  webMapOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.md,
+  },
+  webMapHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.full,
+  },
+  webMapSubhint: {
+    textAlign: "center",
+    paddingHorizontal: Spacing.xl,
   },
 });
 
