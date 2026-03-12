@@ -128,6 +128,37 @@ House Wash, Cement Cleaning, Roof Wash, Gutter Cleaning, Window Cleaning, Deck S
 - `REPS_EMAILS` - Comma-separated rep emails
 - `NEXTAUTH_SECRET` - JWT signing secret
 
+## Healthy Home Backend Integration
+
+The canvassing app auto-syncs with the Healthy Home backend CRM at `https://healthy-home-backend.replit.app`.
+
+### Auto-sync (fires silently on every action)
+- **New lead created** (via touch) → POST `/api/canvassing/leads` on backend
+- **Lead updated** → PUT `/api/canvassing/leads/:id` on backend
+- **Lead marked "sold"** → POST `/api/canvassing/leads/:id/convert` (creates a customer)
+- Backend lead IDs are stored in `leads.backend_lead_id` for future updates
+
+### Manual sync (rep-triggered)
+- Profile screen → "Backend Report" → "Push Session" button
+- Calls `POST /api/sync/session` on this server
+- Computes today's doors/leads/closes/revenue from Supabase for that rep
+- Pushes as a canvassing session to backend `POST /api/canvassing/sessions`
+
+### Admin endpoint
+- `GET /api/backend/dashboard` — fetches today's KPIs + weekly leaderboard from backend
+
+### Status mapping (canvassing → backend)
+| Canvassing app | Backend status |
+|---|---|
+| not_home, no_answer | new |
+| not_interested, do_not_knock | lost |
+| follow_up, booked | follow_up |
+| contacted, interested, quoted | quoted |
+| sold, completed | sold |
+
+### Sync adapter
+`server/lib/backendSync.ts` — all backend communication lives here. No auth required (open endpoints). If you add a `X-API-Key` header to the backend later, update `backendSync.ts`.
+
 ## Setup Instructions
 
 1. Run SQL migrations in Supabase SQL Editor:

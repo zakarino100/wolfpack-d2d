@@ -31,6 +31,12 @@ import {
   canEditLead,
 } from "./lib/crmAdapter";
 import { supabase } from "./lib/supabase";
+import {
+  syncLeadToBackend,
+  convertLeadInBackend,
+  syncSessionToBackend,
+  fetchBackendDashboard,
+} from "./lib/backendSync";
 
 async function runMigrations() {
   const supabaseUrl = process.env.SUPABASE_URL!;
@@ -557,6 +563,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         actor: user.email,
       });
 
+      // Fire-and-forget: sync updated lead to Healthy Home backend
+      (async () => {
+        try {
+          const backendId = await syncLeadToBackend(data, user.email);
+          if (backendId && !data.backend_lead_id) {
+            await supabase
+              .from("leads")
+              .update({ backend_lead_id: backendId })
+              .eq("id", leadId);
+          }
+          // If lead moved to sold and backend has it, trigger conversion
+          if (sanitized.status === "sold" && (data.backend_lead_id || backendId)) {
+            await convertLeadInBackend(data.backend_lead_id || backendId!);
+          }
+        } catch {}
+      })();
+
       res.json({ lead: data });
     } catch (error) {
       console.error("Failed to update lead:", error);
@@ -646,6 +669,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             : `Lead updated at ${lead.address_line1}`,
           actor: user.email,
         });
+
+        // Fire-and-forget: sync to Healthy Home backend
+        (async () => {
+          try {
+            const { data: existing } = await supabase
+              .from("leads")
+              .select("backend_lead_id")
+              .eq("id", finalLeadId)
+              .single();
+            const backendId = await syncLeadToBackend(
+              { ...lead, id: finalLeadId, backend_lead_id: existing?.backend_lead_id },
+              user.email,
+              quote?.quote_amount
+            );
+            if (backendId && !existing?.backend_lead_id) {
+              await supabase
+                .from("leads")
+                .update({ backend_lead_id: backendId })
+                .eq("id", finalLeadId);
+            }
+          } catch {}
+        })();
       }
 
       const touchData = await createTouch({
@@ -761,6 +806,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ activity });
     } catch (error) {
       res.status(500).json({ error: "Failed to log activity" });
+    }
+  });
+
+  // Push today's (or any date's) canvassing stats to the Healthy Home backend as a session
+  app.post("/api/sync/session", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const { date, neighborhood } = req.body;
+      const targetDate = date || new Date().toISOString().split("T")[0];
+      const start = `${targetDate}T00:00:00Z`;
+      const end = `${targetDate}T23:59:59Z`;
+
+      const [{ data: pins }, { data: leads }, { data: quotes }] = await Promise.all([
+        supabase.from("pins").select("id").eq("created_by", user.email).gte("created_at", start).lte("created_at", end),
+        supabase.from("leads").select("id, status").eq("created_by", user.email).gte("created_at", start).lte("created_at", end),
+        supabase.from("d2d_quotes").select("quote_amount").eq("rep_email", user.email).gte("created_at", start).lte("created_at", end),
+      ]);
+
+      const doorsKnocked = pins?.length || 0;
+      const peopleReached = leads?.length || 0;
+      const soldLeads = (leads || []).filter((l: any) => l.status === "sold" || l.status === "completed");
+      const quotedLeads = (leads || []).filter((l: any) =>
+        ["quoted", "interested", "sold", "completed"].includes(l.status)
+      );
+      const totalRevenue = (quotes || []).reduce(
+        (sum: number, q: any) => sum + parseFloat(q.quote_amount || "0"),
+        0
+      );
+
+      const sessionId = await syncSessionToBackend({
+        canvasser: user.email,
+        date: targetDate,
+        neighborhood: neighborhood || undefined,
+        doorsKnocked,
+        peopleReached,
+        quotesGiven: quotedLeads.length,
+        closes: soldLeads.length,
+        revenueSold: totalRevenue.toFixed(2),
+      });
+
+      res.json({
+        success: true,
+        sessionId,
+        stats: { doorsKnocked, peopleReached, quotesGiven: quotedLeads.length, closes: soldLeads.length, revenueSold: totalRevenue.toFixed(2) },
+      });
+    } catch (error) {
+      console.error("Failed to sync session:", error);
+      res.status(500).json({ error: "Failed to sync session to backend" });
+    }
+  });
+
+  // Fetch live dashboard data from the Healthy Home backend
+  app.get("/api/backend/dashboard", authMiddleware, adminMiddleware, async (_req: Request, res: Response) => {
+    try {
+      const dashboard = await fetchBackendDashboard();
+      res.json(dashboard);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch backend dashboard" });
     }
   });
 

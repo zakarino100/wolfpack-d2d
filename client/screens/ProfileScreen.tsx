@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, StyleSheet, Pressable, Alert, Switch, AppState, Platform } from "react-native";
+import { View, StyleSheet, Pressable, Alert, Switch, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -33,8 +33,12 @@ export default function ProfileScreen() {
 
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [sessionSyncing, setSessionSyncing] = useState(false);
+  const [lastSessionSync, setLastSessionSync] = useState<string | null>(null);
   const [shareLocation, setShareLocation] = useState(false);
   const locationInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const SESSION_SYNC_KEY = "@healthy_home_last_session_sync";
 
   const { data: pinsData } = useQuery<{ pins: Pin[] }>({
     queryKey: ["/api/pins"],
@@ -59,6 +63,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     loadPendingCount();
     loadLocationPref();
+    AsyncStorage.getItem(SESSION_SYNC_KEY).then((v) => setLastSessionSync(v));
   }, []);
 
   useEffect(() => {
@@ -134,6 +139,29 @@ export default function ProfileScreen() {
       Alert.alert("Error", "Sync failed. Please try again.");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleSessionSync = async () => {
+    setSessionSyncing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const result = await apiRequest("POST", "/api/sync/session", {});
+      const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      await AsyncStorage.setItem(SESSION_SYNC_KEY, ts);
+      setLastSessionSync(ts);
+      const stats = (result as any)?.stats;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "Session Pushed",
+        stats
+          ? `Doors: ${stats.doorsKnocked}  |  Leads: ${stats.peopleReached}  |  Closed: ${stats.closes}`
+          : "Today's session sent to the backend."
+      );
+    } catch {
+      Alert.alert("Error", "Could not push session. Check your connection.");
+    } finally {
+      setSessionSyncing(false);
     }
   };
 
@@ -283,6 +311,33 @@ export default function ProfileScreen() {
               {syncing ? "Syncing..." : "Sync Now"}
             </Button>
           ) : null}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <ThemedText type="h4" style={styles.sectionTitle}>
+          Backend Report
+        </ThemedText>
+        <View style={[styles.syncCard, { backgroundColor: theme.backgroundDefault }]}>
+          <View style={styles.syncInfo}>
+            <Feather name="send" size={24} color={theme.primary} />
+            <View style={{ flex: 1 }}>
+              <ThemedText type="body">Push today's session</ThemedText>
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                {lastSessionSync
+                  ? `Last pushed at ${lastSessionSync}`
+                  : "Sends doors, leads, and closes to HH backend"}
+              </ThemedText>
+            </View>
+          </View>
+          <Button
+            onPress={handleSessionSync}
+            disabled={sessionSyncing}
+            style={styles.syncBtn}
+            testID="button-push-session"
+          >
+            {sessionSyncing ? "Pushing..." : "Push Session"}
+          </Button>
         </View>
       </View>
 

@@ -9,6 +9,9 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS sold_at timestamptz;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS contact_name text;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS contact_phone text;
 
+-- Backend sync tracking: stores the ID from the Healthy Home backend CRM
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS backend_lead_id integer;
+
 -- Routes table
 CREATE TABLE IF NOT EXISTS routes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

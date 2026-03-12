@@ -1,0 +1,98 @@
+Just to clarify — I am the Healthy Home backend. You're currently inside that project. So I can give you everything your canvassing app needs right now, directly from this codebase. Here it is:
+
+1. Deployed URL
+
+The project was just published. Your deployed base URL is:
+
+https://healthy-home-backend.replit.app/api
+(All routes are prefixed with /api)
+
+2. API Routes
+
+The routes your canvassing app will care about most:
+
+# Canvassing Sessions
+POST   /api/canvassing/sessions          — log a D2D session
+GET    /api/canvassing/sessions          — list (filter: ?date=&canvasser=&neighborhood=)
+PUT    /api/canvassing/sessions/:id      — update a session
+DELETE /api/canvassing/sessions/:id      — delete a session
+# Leads
+POST   /api/canvassing/leads             — create a lead
+GET    /api/canvassing/leads             — list (filter: ?status=&canvasser=&source=)
+PUT    /api/canvassing/leads/:id         — update a lead
+DELETE /api/canvassing/leads/:id         — delete a lead
+POST   /api/canvassing/leads/:id/convert — convert sold lead → customer
+# Customers
+GET    /api/customers                    — list customers
+POST   /api/customers                    — create a customer
+GET    /api/customers/:id                — get one
+# Jobs
+GET    /api/jobs                         — list (filter: ?status=&date=)
+POST   /api/jobs                         — create
+POST   /api/jobs/:id/complete            — complete a job (triggers review workflow)
+# Dashboard
+GET    /api/dashboard/today              — today's KPI snapshot
+GET    /api/dashboard/weekly             — weekly leaderboard + metrics
+# Reports
+POST   /api/reports/daily/generate       — generate Robin report for a date
+GET    /api/reports/daily/:date/export   — fetch report (?format=json|csv)
+3. Auth
+
+Currently no auth — all endpoints are open. There are no API keys, JWTs, or middleware gatekeeping requests. If you want to add a simple API key check before deploying publicly, just let me know and I'll wire it in as a header check (e.g. X-API-Key).
+
+4. Lead, Customer, and Job data shapes
+
+Lead (POST /api/canvassing/leads)
+
+{
+  firstName: string           // required
+  lastName?: string           // default ""
+  phone?: string
+  email?: string
+  address?: string
+  city?: string
+  state?: string
+  zip?: string
+  source?: "d2d" | "referral" | "ad" | "other"   // default "d2d"
+  canvasser?: string          // canvasser name
+  quoteAmount?: string        // e.g. "299.00"
+  serviceInterest?: string    // e.g. "house_wash + driveway"
+  status?: "new" | "quoted" | "follow_up" | "sold" | "lost"  // default "new"
+  followUpDate?: string       // YYYY-MM-DD
+  notes?: string
+  sessionId?: number          // link to canvassing session
+}
+Canvassing Session (POST /api/canvassing/sessions)
+
+{
+  canvasser: string           // required
+  sessionDate: string         // required — YYYY-MM-DD
+  neighborhood?: string
+  route?: string
+  doorsKnocked: number
+  peopleReached: number
+  goodConversations: number
+  quotesGiven: number
+  closes: number
+  revenueSold: string         // e.g. "599.00"
+  averageTicket?: string
+  bundleCount: number
+  driveawayAddOnCount: number
+  notes?: string
+}
+Job (POST /api/jobs)
+
+{
+  customerId: number          // required — links to customer record
+  serviceType: "house_wash" | "driveway_cleaning" | "bundle" | "other"
+  packageType?: string
+  quotedPrice?: string
+  soldPrice?: string
+  status?: "scheduled" | "completed" | "rescheduled" | "canceled"
+  scheduledAt?: string        // ISO datetime
+  technicianAssigned?: string
+  paymentStatus?: "pending" | "collected" | "invoiced" | "waived"
+  paymentAmountCollected?: string
+  notes?: string
+}
+The quickest integration pattern for a canvassing field app: create a session at the start of the day, then POST /api/canvassing/leads for each door with the sessionId attached. At end of day the scheduler auto-generates the Robin report at 8pm CT.

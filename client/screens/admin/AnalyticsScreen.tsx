@@ -6,7 +6,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 
@@ -28,14 +28,14 @@ interface SummaryCardData {
 export default function AnalyticsScreen() {
   const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
 
   const {
     data: summaryData,
     isLoading: summaryLoading,
     refetch: refetchSummary,
     isRefetching: isRefetchingSummary,
-  } = useQuery<AnalyticsSummary>({
+  } = useQuery<{ summary: AnalyticsSummary }>({
     queryKey: ["/api/analytics/summary"],
   });
 
@@ -64,7 +64,7 @@ export default function AnalyticsScreen() {
     );
   }
 
-  const summary = summaryData || {
+  const summary = summaryData?.summary || {
     total_doors: 0,
     total_leads: 0,
     total_sold: 0,
@@ -108,7 +108,7 @@ export default function AnalyticsScreen() {
           styles.scrollContent,
           {
             paddingTop: headerHeight + Spacing.xl,
-            paddingBottom: tabBarHeight + Spacing.xl,
+            paddingBottom: insets.bottom + 90 + Spacing.xl,
           },
         ]}
         refreshControl={
