@@ -30,6 +30,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  interpolate,
   FadeInUp,
   SlideInDown,
 } from "react-native-reanimated";
@@ -100,6 +101,9 @@ export default function CanvassScreen() {
   const [saving, setSaving] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  const searchExpand = useSharedValue(0);
   const [services, setServices] = useState<Service[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [pins, setPins] = useState<any[]>([]);
@@ -125,6 +129,32 @@ export default function CanvassScreen() {
     loadPins();
     requestLocationPermission();
   }, []);
+
+  useEffect(() => {
+    searchExpand.value = withSpring(searchOpen ? 1 : 0, { damping: 20, stiffness: 260 });
+    if (searchOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 180);
+    } else {
+      setSearchQuery("");
+    }
+  }, [searchOpen]);
+
+  const SEARCH_EXPANDED_WIDTH = SCREEN_WIDTH - 2 * Spacing.lg;
+
+  const animatedSearchBarStyle = useAnimatedStyle(() => ({
+    width: interpolate(searchExpand.value, [0, 1], [48, SEARCH_EXPANDED_WIDTH]),
+    borderRadius: interpolate(searchExpand.value, [0, 1], [24, 14]),
+  }));
+
+  const animatedInputStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(searchExpand.value, [0.4, 1], [0, 1]),
+    flex: 1,
+  }));
+
+  const animatedOtherBtnsStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(searchExpand.value, [0, 0.3], [1, 0]),
+    pointerEvents: searchOpen ? "none" : "auto",
+  } as any));
 
   const loadServices = async () => {
     try {
@@ -419,14 +449,8 @@ export default function CanvassScreen() {
         setRegion(newRegion);
         mapRef.current?.animateToRegion(newRegion, 500);
         setSelectedLocation({ latitude: lat, longitude: lng });
-
-        const addressData = await reverseGeocode(lat, lng);
-        if (addressData) {
-          setAddress(addressData);
-          const existing = await checkExistingLead(addressData);
-          setExistingLead(existing);
-          setShowForm(true);
-        }
+        setSearchOpen(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch {
       console.error("Search failed");
@@ -692,32 +716,55 @@ export default function CanvassScreen() {
       ) : null}
 
       <View style={[styles.searchContainer, { top: insets.top + Spacing.md }]}>
-        <View style={[styles.searchBar, { backgroundColor: theme.backgroundRoot }, Shadows.md]}>
-          <Feather name="search" size={20} color={theme.textSecondary} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search address..."
-            placeholderTextColor={theme.textSecondary}
-            style={[styles.searchInput, { color: theme.text }]}
-            onSubmitEditing={handleSearch}
-            returnKeyType="search"
-          />
-          {searchQuery ? (
-            <Pressable onPress={() => setSearchQuery("")}>
-              <Feather name="x" size={18} color={theme.textSecondary} />
-            </Pressable>
-          ) : null}
-        </View>
-
-        <Pressable
-          onPress={handleUseMyLocation}
-          style={[styles.locationBtn, { backgroundColor: theme.backgroundRoot }, Shadows.md]}
+        <Animated.View
+          style={[
+            styles.searchBar,
+            { backgroundColor: theme.backgroundRoot },
+            Shadows.md,
+            animatedSearchBarStyle,
+          ]}
         >
-          <Feather name="navigation" size={20} color={theme.primary} />
-        </Pressable>
+          <Pressable
+            onPress={() => setSearchOpen((o) => !o)}
+            hitSlop={8}
+            style={styles.searchIconBtn}
+          >
+            <Feather
+              name={searchOpen ? "x" : "search"}
+              size={20}
+              color={searchOpen ? theme.textSecondary : theme.primary}
+            />
+          </Pressable>
 
-        <SyncBadge onSync={syncPending} />
+          <Animated.View style={[styles.searchInputWrap, animatedInputStyle]}>
+            <TextInput
+              ref={searchInputRef}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search address..."
+              placeholderTextColor={theme.textSecondary}
+              style={[styles.searchInput, { color: theme.text }]}
+              onSubmitEditing={handleSearch}
+              returnKeyType="search"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 ? (
+              <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+                <Feather name="x-circle" size={18} color={theme.textSecondary} />
+              </Pressable>
+            ) : null}
+          </Animated.View>
+        </Animated.View>
+
+        <Animated.View style={[styles.mapBtnsRow, animatedOtherBtnsStyle]}>
+          <Pressable
+            onPress={handleUseMyLocation}
+            style={[styles.locationBtn, { backgroundColor: theme.backgroundRoot }, Shadows.md]}
+          >
+            <Feather name="navigation" size={20} color={theme.primary} />
+          </Pressable>
+          <SyncBadge onSync={syncPending} />
+        </Animated.View>
       </View>
 
       {canvassMode === "add_pin" ? (
@@ -1009,27 +1056,48 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: Spacing.lg,
     right: Spacing.lg,
-    flexDirection: "row",
-    gap: Spacing.sm,
-    alignItems: "center",
+    height: 48,
   },
   searchBar: {
-    flex: 1,
+    position: "absolute",
+    left: 0,
+    top: 0,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: Spacing.md,
     height: 48,
-    borderRadius: BorderRadius.md,
+    overflow: "hidden",
     gap: Spacing.sm,
+  },
+  searchIconBtn: {
+    width: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    overflow: "hidden",
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
+    minWidth: 0,
+  },
+  mapBtnsRow: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    flexDirection: "row",
+    gap: Spacing.sm,
+    alignItems: "center",
+    height: 48,
   },
   locationBtn: {
     width: 48,
     height: 48,
-    borderRadius: BorderRadius.md,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
