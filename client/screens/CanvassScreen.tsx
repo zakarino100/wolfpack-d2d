@@ -61,7 +61,8 @@ import {
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { addPendingSync, getPendingSyncs, removePendingSync } from "@/lib/storage";
 
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const SEARCH_EXPANDED_WIDTH = SCREEN_WIDTH - 2 * Spacing.lg;
 
 type CanvassMode = "view" | "add_pin";
 
@@ -138,8 +139,6 @@ export default function CanvassScreen() {
       setSearchQuery("");
     }
   }, [searchOpen]);
-
-  const SEARCH_EXPANDED_WIDTH = SCREEN_WIDTH - 2 * Spacing.lg;
 
   const animatedSearchBarStyle = useAnimatedStyle(() => ({
     width: interpolate(searchExpand.value, [0, 1], [48, SEARCH_EXPANDED_WIDTH]),
