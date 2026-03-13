@@ -971,6 +971,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Fire-and-forget: sync new lead to Healthy Home backend
+      if (result.lead) {
+        (async () => {
+          try {
+            const backendId = await syncLeadToBackend(
+              result.lead!,
+              user.email,
+              quote?.quote_amount
+            );
+            if (backendId) {
+              console.log(`[backendSync] Lead synced to backend id=${backendId} status=${leadStatus}`);
+              await supabase
+                .from("leads")
+                .update({ backend_lead_id: backendId })
+                .eq("id", result.lead!.id);
+              // If sold, trigger conversion in backend
+              if (leadStatus === "sold") {
+                await convertLeadInBackend(backendId);
+                console.log(`[backendSync] Sold lead converted in backend id=${backendId}`);
+              }
+            } else {
+              console.warn(`[backendSync] create-with-lead sync returned no backendId`);
+            }
+          } catch (e: any) {
+            console.warn(`[backendSync] create-with-lead sync error:`, e?.message);
+          }
+        })();
+      }
+
       res.json(result);
     } catch (error) {
       console.error("Failed to create pin with lead:", error);
