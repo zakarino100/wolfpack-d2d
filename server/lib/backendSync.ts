@@ -72,7 +72,7 @@ export async function syncLeadToBackend(
       });
       if (res.ok) {
         const json = await res.json();
-        return (json as any).lead?.id ?? backendId;
+        return (json as any).lead?.id ?? (json as any).id ?? backendId;
       }
     } else {
       const res = await fetch(`${BACKEND_URL}/api/canvassing/leads`, {
@@ -83,7 +83,7 @@ export async function syncLeadToBackend(
       });
       if (res.ok) {
         const json = await res.json();
-        return (json as any).lead?.id ?? null;
+        return (json as any).lead?.id ?? (json as any).id ?? null;
       }
     }
 
