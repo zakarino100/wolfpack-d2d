@@ -56,6 +56,7 @@ export default function AdminMapScreen() {
   const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
   const [showFilter, setShowFilter] = useState(false);
   const [activeStatuses, setActiveStatuses] = useState<LeadStatus[]>([...STATUS_KEYS]);
+  const [showOnlyUnscheduled, setShowOnlyUnscheduled] = useState(false);
   const markerPressedRef = useRef(false);
 
   const { data: pinsData } = useQuery<{ pins: Pin[] }>({
@@ -68,12 +69,23 @@ export default function AdminMapScreen() {
     refetchInterval: 10000,
   });
 
+  const { data: unscheduledData } = useQuery<{ leads: { id: string }[] }>({
+    queryKey: ["/api/leads/unscheduled"],
+    refetchInterval: 60000,
+  });
+
   const pins = pinsData?.pins || [];
   const repLocations = repLocData?.locations || [];
+  const unscheduledLeadIds = new Set((unscheduledData?.leads || []).map((l) => l.id));
+  const unscheduledCount = unscheduledData?.leads?.length || 0;
 
   const filteredPins = pins.filter((pin) => {
     const status = (pin.status || pin.lead?.status || "not_home") as LeadStatus;
-    return activeStatuses.includes(status);
+    if (!activeStatuses.includes(status)) return false;
+    if (showOnlyUnscheduled) {
+      return pin.lead?.id ? unscheduledLeadIds.has(pin.lead.id) : false;
+    }
+    return true;
   });
 
   const getMarkerConfig = (status: string): { color: string; icon: string } => {
@@ -195,9 +207,16 @@ export default function AdminMapScreen() {
         <Pressable
           testID="button-filter"
           onPress={() => setShowFilter(true)}
-          style={[styles.iconBtn, { backgroundColor: theme.backgroundRoot }, Shadows.md]}
+          style={[
+            styles.iconBtn,
+            { backgroundColor: theme.backgroundRoot },
+            Shadows.md,
+            (showOnlyUnscheduled || activeStatuses.length < STATUS_KEYS.length)
+              ? { borderWidth: 2, borderColor: theme.primary }
+              : null,
+          ]}
         >
-          <Feather name="filter" size={20} color={theme.text} />
+          <Feather name="filter" size={20} color={showOnlyUnscheduled ? theme.primary : theme.text} />
         </Pressable>
 
         <Pressable
@@ -208,6 +227,37 @@ export default function AdminMapScreen() {
           <Feather name="navigation" size={20} color={theme.primary} />
         </Pressable>
       </View>
+
+      {unscheduledCount > 0 ? (
+        <Pressable
+          testID="button-unscheduled-quick"
+          onPress={() => setShowOnlyUnscheduled((v) => !v)}
+          style={[
+            styles.unscheduledPill,
+            {
+              top: insets.top + Spacing.md,
+              backgroundColor: showOnlyUnscheduled ? theme.success : theme.backgroundRoot,
+            },
+            Shadows.md,
+          ]}
+        >
+          <Feather
+            name="briefcase"
+            size={14}
+            color={showOnlyUnscheduled ? "#fff" : theme.success}
+          />
+          <ThemedText
+            type="small"
+            style={{
+              color: showOnlyUnscheduled ? "#fff" : theme.success,
+              fontWeight: "700",
+              marginLeft: 4,
+            }}
+          >
+            {unscheduledCount} Unscheduled
+          </ThemedText>
+        </Pressable>
+      ) : null}
 
       <View style={[styles.legend, { bottom: insets.bottom + 100, backgroundColor: `${theme.backgroundRoot}E6` }, Shadows.md]}>
         {STATUS_KEYS.map((key) => (
@@ -304,7 +354,52 @@ export default function AdminMapScreen() {
               </Pressable>
             </View>
 
-            <ThemedText type="body" style={{ marginBottom: Spacing.md }}>
+            {/* Sold & Unscheduled Quick Filter */}
+            <Pressable
+              testID="chip-unscheduled"
+              onPress={() => setShowOnlyUnscheduled((v) => !v)}
+              style={[
+                styles.unscheduledToggle,
+                {
+                  backgroundColor: showOnlyUnscheduled ? `${theme.success}20` : theme.backgroundSecondary,
+                  borderColor: showOnlyUnscheduled ? theme.success : theme.border,
+                },
+              ]}
+            >
+              <Feather
+                name="briefcase"
+                size={16}
+                color={showOnlyUnscheduled ? theme.success : theme.textSecondary}
+              />
+              <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                <ThemedText
+                  type="body"
+                  style={{
+                    fontWeight: "600",
+                    color: showOnlyUnscheduled ? theme.success : theme.text,
+                  }}
+                >
+                  Sold & Unscheduled
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                  {unscheduledCount > 0
+                    ? `${unscheduledCount} job${unscheduledCount !== 1 ? "s" : ""} need scheduling`
+                    : "All sold jobs are scheduled"}
+                </ThemedText>
+              </View>
+              <View
+                style={[
+                  styles.toggleIndicator,
+                  { backgroundColor: showOnlyUnscheduled ? theme.success : theme.backgroundSecondary },
+                ]}
+              >
+                {showOnlyUnscheduled ? (
+                  <Feather name="check" size={12} color="#fff" />
+                ) : null}
+              </View>
+            </Pressable>
+
+            <ThemedText type="body" style={{ marginBottom: Spacing.md, marginTop: Spacing.lg }}>
               Status
             </ThemedText>
             <View style={styles.chipContainer}>
@@ -398,6 +493,30 @@ const styles = StyleSheet.create({
     right: Spacing.lg,
     flexDirection: "column",
     gap: Spacing.sm,
+  },
+  unscheduledPill: {
+    position: "absolute",
+    left: Spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+  },
+  unscheduledToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  toggleIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
   iconBtn: {
     width: 44,

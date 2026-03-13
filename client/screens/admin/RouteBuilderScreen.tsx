@@ -27,6 +27,13 @@ import { BorderRadius, Spacing, Shadows } from "@/constants/theme";
 import { Route, RouteStop, Lead } from "@/types";
 import { apiRequest } from "@/lib/query-client";
 
+interface AppUser {
+  id: string;
+  email: string;
+  name?: string;
+  role?: string;
+}
+
 function formatDate(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -76,7 +83,9 @@ export default function RouteBuilderScreen() {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createRouteName, setCreateRouteName] = useState("");
-  const [createRepEmail, setCreateRepEmail] = useState("");
+  const [selectedRepEmail, setSelectedRepEmail] = useState("");
+  const [selectedRepName, setSelectedRepName] = useState("");
+  const [showRepPicker, setShowRepPicker] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const [showAddStopModal, setShowAddStopModal] = useState(false);
@@ -96,18 +105,23 @@ export default function RouteBuilderScreen() {
     queryKey: ["/api/routes"],
   });
 
+  const { data: usersData } = useQuery<{ users: AppUser[] }>({
+    queryKey: ["/api/users"],
+  });
+
   const {
     data: unscheduledData,
     isLoading: loadingUnscheduled,
     refetch: refetchUnscheduled,
   } = useQuery<{ leads: Lead[] }>({
     queryKey: ["/api/leads/unscheduled"],
-    enabled: showAddStopModal,
   });
 
   const allRoutes = routesData?.routes || [];
   const filteredRoutes = allRoutes.filter((r) => r.date === selectedDate);
   const unscheduledLeads = unscheduledData?.leads || [];
+  const users = usersData?.users || [];
+  const unscheduledCount = unscheduledLeads.length;
 
   const handleCreateRoute = async () => {
     if (!createRouteName.trim()) return;
@@ -116,12 +130,13 @@ export default function RouteBuilderScreen() {
       await apiRequest("POST", "/api/routes", {
         name: createRouteName.trim(),
         date: selectedDate,
-        rep_email: createRepEmail.trim() || null,
+        rep_email: selectedRepEmail || null,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       setShowCreateModal(false);
       setCreateRouteName("");
-      setCreateRepEmail("");
+      setSelectedRepEmail("");
+      setSelectedRepName("");
     } catch (e) {
       console.error("Failed to create route:", e);
     } finally {
@@ -146,10 +161,7 @@ export default function RouteBuilderScreen() {
     }
   };
 
-  const handleToggleStopStatus = async (
-    routeId: string,
-    stop: RouteStop
-  ) => {
+  const handleToggleStopStatus = async (routeId: string, stop: RouteStop) => {
     const newStatus = stop.status === "completed" ? "pending" : "completed";
     setTogglingStopId(stop.id);
     try {
@@ -167,9 +179,7 @@ export default function RouteBuilderScreen() {
   const handlePublishRoute = async (routeId: string) => {
     setPublishingRouteId(routeId);
     try {
-      await apiRequest("PUT", `/api/routes/${routeId}`, {
-        status: "shared",
-      });
+      await apiRequest("PUT", `/api/routes/${routeId}`, { status: "shared" });
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
     } catch (e) {
       console.error("Failed to publish route:", e);
@@ -204,28 +214,18 @@ export default function RouteBuilderScreen() {
           style={[
             styles.dateButton,
             {
-              backgroundColor: isSelected
-                ? theme.primary
-                : theme.backgroundDefault,
+              backgroundColor: isSelected ? theme.primary : theme.backgroundDefault,
               borderColor: isSelected ? theme.primary : theme.borderLight,
             },
           ]}
         >
           <ThemedText
             type="small"
-            style={{
-              color: isSelected ? "#fff" : theme.textSecondary,
-              fontWeight: "600",
-            }}
+            style={{ color: isSelected ? "#fff" : theme.textSecondary, fontWeight: "600" }}
           >
             {getDayLabel(date)}
           </ThemedText>
-          <ThemedText
-            type="h4"
-            style={{
-              color: isSelected ? "#fff" : theme.text,
-            }}
-          >
+          <ThemedText type="h4" style={{ color: isSelected ? "#fff" : theme.text }}>
             {getDayNumber(date)}
           </ThemedText>
         </Pressable>
@@ -238,30 +238,17 @@ export default function RouteBuilderScreen() {
     const isToggling = togglingStopId === stop.id;
     const isCompleted = stop.status === "completed";
     return (
-      <View
-        key={stop.id}
-        style={[
-          styles.stopRow,
-          { borderBottomColor: theme.borderLight },
-        ]}
-      >
+      <View key={stop.id} style={[styles.stopRow, { borderBottomColor: theme.borderLight }]}>
         <View style={styles.stopOrderContainer}>
           <View
             style={[
               styles.stopOrderBadge,
-              {
-                backgroundColor: isCompleted
-                  ? theme.success
-                  : theme.backgroundSecondary,
-              },
+              { backgroundColor: isCompleted ? theme.success : theme.backgroundSecondary },
             ]}
           >
             <ThemedText
               type="small"
-              style={{
-                color: isCompleted ? "#fff" : theme.text,
-                fontWeight: "700",
-              }}
+              style={{ color: isCompleted ? "#fff" : theme.text, fontWeight: "700" }}
             >
               {stop.stop_order}
             </ThemedText>
@@ -294,11 +281,7 @@ export default function RouteBuilderScreen() {
           disabled={isToggling}
           style={[
             styles.stopToggle,
-            {
-              backgroundColor: isCompleted
-                ? `${theme.success}20`
-                : `${theme.textSecondary}15`,
-            },
+            { backgroundColor: isCompleted ? `${theme.success}20` : `${theme.textSecondary}15` },
           ]}
         >
           {isToggling ? (
@@ -322,38 +305,20 @@ export default function RouteBuilderScreen() {
     const isSharing = sharingRouteId === route.id;
 
     return (
-      <Card
-        style={styles.routeCard}
-        onPress={() =>
-          setExpandedRouteId(isExpanded ? null : route.id)
-        }
-      >
+      <Card style={styles.routeCard} onPress={() => setExpandedRouteId(isExpanded ? null : route.id)}>
         <View style={styles.routeHeader}>
           <View style={styles.routeHeaderLeft}>
             <ThemedText type="h4">{route.name || "Untitled Route"}</ThemedText>
             <View style={styles.routeMeta}>
               {route.rep_email ? (
                 <View style={styles.repRow}>
-                  <Feather
-                    name="user"
-                    size={12}
-                    color={theme.textSecondary}
-                  />
-                  <ThemedText
-                    type="small"
-                    style={{
-                      color: theme.textSecondary,
-                      marginLeft: Spacing.xs,
-                    }}
-                  >
+                  <Feather name="user" size={12} color={theme.textSecondary} />
+                  <ThemedText type="small" style={{ color: theme.textSecondary, marginLeft: Spacing.xs }}>
                     {route.rep_name || route.rep_email}
                   </ThemedText>
                 </View>
               ) : null}
-              <ThemedText
-                type="small"
-                style={{ color: theme.textSecondary }}
-              >
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>
                 {stopCount} stop{stopCount !== 1 ? "s" : ""}
               </ThemedText>
             </View>
@@ -371,12 +336,7 @@ export default function RouteBuilderScreen() {
 
         {isExpanded ? (
           <View style={styles.routeExpanded}>
-            <View
-              style={[
-                styles.divider,
-                { backgroundColor: theme.borderLight },
-              ]}
-            />
+            <View style={[styles.divider, { backgroundColor: theme.borderLight }]} />
 
             {stopCount > 0 ? (
               <View>
@@ -387,11 +347,7 @@ export default function RouteBuilderScreen() {
             ) : (
               <ThemedText
                 type="small"
-                style={{
-                  color: theme.textSecondary,
-                  textAlign: "center",
-                  paddingVertical: Spacing.lg,
-                }}
+                style={{ color: theme.textSecondary, textAlign: "center", paddingVertical: Spacing.lg }}
               >
                 No stops added yet
               </ThemedText>
@@ -404,22 +360,19 @@ export default function RouteBuilderScreen() {
                   setAddStopRouteId(route.id);
                   setShowAddStopModal(true);
                 }}
-                style={[
-                  styles.actionBtn,
-                  { backgroundColor: `${theme.primary}15` },
-                ]}
+                style={[styles.actionBtn, { backgroundColor: `${theme.primary}15` }]}
               >
                 <Feather name="plus" size={16} color={theme.primary} />
-                <ThemedText
-                  type="small"
-                  style={{
-                    color: theme.primary,
-                    fontWeight: "600",
-                    marginLeft: Spacing.xs,
-                  }}
-                >
+                <ThemedText type="small" style={{ color: theme.primary, fontWeight: "600", marginLeft: Spacing.xs }}>
                   Add Stop
                 </ThemedText>
+                {unscheduledCount > 0 ? (
+                  <View style={[styles.countBadge, { backgroundColor: theme.primary }]}>
+                    <ThemedText type="small" style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>
+                      {unscheduledCount}
+                    </ThemedText>
+                  </View>
+                ) : null}
               </Pressable>
 
               {route.status === "draft" ? (
@@ -427,28 +380,14 @@ export default function RouteBuilderScreen() {
                   testID={`publish-route-${route.id}`}
                   onPress={() => handlePublishRoute(route.id)}
                   disabled={isPublishing}
-                  style={[
-                    styles.actionBtn,
-                    { backgroundColor: `${theme.success}15` },
-                  ]}
+                  style={[styles.actionBtn, { backgroundColor: `${theme.success}15` }]}
                 >
                   {isPublishing ? (
                     <ActivityIndicator size="small" color={theme.success} />
                   ) : (
                     <>
-                      <Feather
-                        name="send"
-                        size={16}
-                        color={theme.success}
-                      />
-                      <ThemedText
-                        type="small"
-                        style={{
-                          color: theme.success,
-                          fontWeight: "600",
-                          marginLeft: Spacing.xs,
-                        }}
-                      >
+                      <Feather name="send" size={16} color={theme.success} />
+                      <ThemedText type="small" style={{ color: theme.success, fontWeight: "600", marginLeft: Spacing.xs }}>
                         Publish
                       </ThemedText>
                     </>
@@ -460,28 +399,14 @@ export default function RouteBuilderScreen() {
                 testID={`share-sms-${route.id}`}
                 onPress={() => handleShareSMS(route.id)}
                 disabled={isSharing}
-                style={[
-                  styles.actionBtn,
-                  { backgroundColor: `${theme.info}15` },
-                ]}
+                style={[styles.actionBtn, { backgroundColor: `${theme.info}15` }]}
               >
                 {isSharing ? (
                   <ActivityIndicator size="small" color={theme.info} />
                 ) : (
                   <>
-                    <Feather
-                      name="message-square"
-                      size={16}
-                      color={theme.info}
-                    />
-                    <ThemedText
-                      type="small"
-                      style={{
-                        color: theme.info,
-                        fontWeight: "600",
-                        marginLeft: Spacing.xs,
-                      }}
-                    >
+                    <Feather name="message-square" size={16} color={theme.info} />
+                    <ThemedText type="small" style={{ color: theme.info, fontWeight: "600", marginLeft: Spacing.xs }}>
                       Share SMS
                     </ThemedText>
                   </>
@@ -519,36 +444,16 @@ export default function RouteBuilderScreen() {
           ) : null}
           {lead.homeowner_name ? (
             <View style={styles.contactRow}>
-              <Feather
-                name="user"
-                size={12}
-                color={theme.textSecondary}
-              />
-              <ThemedText
-                type="small"
-                style={{
-                  color: theme.textSecondary,
-                  marginLeft: Spacing.xs,
-                }}
-              >
+              <Feather name="user" size={12} color={theme.textSecondary} />
+              <ThemedText type="small" style={{ color: theme.textSecondary, marginLeft: Spacing.xs }}>
                 {lead.homeowner_name}
               </ThemedText>
             </View>
           ) : null}
           {lead.phone ? (
             <View style={styles.contactRow}>
-              <Feather
-                name="phone"
-                size={12}
-                color={theme.textSecondary}
-              />
-              <ThemedText
-                type="small"
-                style={{
-                  color: theme.textSecondary,
-                  marginLeft: Spacing.xs,
-                }}
-              >
+              <Feather name="phone" size={12} color={theme.textSecondary} />
+              <ThemedText type="small" style={{ color: theme.textSecondary, marginLeft: Spacing.xs }}>
                 {lead.phone}
               </ThemedText>
             </View>
@@ -556,17 +461,8 @@ export default function RouteBuilderScreen() {
           {lead.services_interested && lead.services_interested.length > 0 ? (
             <View style={styles.servicesRow}>
               {lead.services_interested.map((s) => (
-                <View
-                  key={s}
-                  style={[
-                    styles.serviceChip,
-                    { backgroundColor: `${theme.primary}15` },
-                  ]}
-                >
-                  <ThemedText
-                    type="small"
-                    style={{ color: theme.primary, fontSize: 11 }}
-                  >
+                <View key={s} style={[styles.serviceChip, { backgroundColor: `${theme.primary}15` }]}>
+                  <ThemedText type="small" style={{ color: theme.primary, fontSize: 11 }}>
                     {s}
                   </ThemedText>
                 </View>
@@ -575,27 +471,14 @@ export default function RouteBuilderScreen() {
           ) : null}
           {lead.preferred_day || lead.preferred_time ? (
             <View style={styles.contactRow}>
-              <Feather
-                name="clock"
-                size={12}
-                color={theme.textSecondary}
-              />
-              <ThemedText
-                type="small"
-                style={{
-                  color: theme.textSecondary,
-                  marginLeft: Spacing.xs,
-                }}
-              >
+              <Feather name="clock" size={12} color={theme.textSecondary} />
+              <ThemedText type="small" style={{ color: theme.textSecondary, marginLeft: Spacing.xs }}>
                 Prefers: {[lead.preferred_day, lead.preferred_time].filter(Boolean).join(" ")}
               </ThemedText>
             </View>
           ) : null}
           {lead.scheduling_notes ? (
-            <ThemedText
-              type="small"
-              style={{ color: theme.textSecondary, fontStyle: "italic" }}
-            >
+            <ThemedText type="small" style={{ color: theme.textSecondary, fontStyle: "italic" }}>
               {lead.scheduling_notes}
             </ThemedText>
           ) : null}
@@ -642,33 +525,27 @@ export default function RouteBuilderScreen() {
           { paddingBottom: tabBarHeight + Spacing["3xl"] + 60 },
         ]}
         refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={refetch}
-            tintColor={theme.primary}
-          />
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.primary} />
+        }
+        ListHeaderComponent={
+          unscheduledCount > 0 ? (
+            <View style={[styles.unscheduledBanner, { backgroundColor: `${theme.success}15`, borderColor: `${theme.success}40` }]}>
+              <Feather name="briefcase" size={16} color={theme.success} />
+              <ThemedText type="small" style={{ color: theme.success, fontWeight: "600", flex: 1, marginLeft: Spacing.sm }}>
+                {unscheduledCount} sold job{unscheduledCount !== 1 ? "s" : ""} waiting to be scheduled
+              </ThemedText>
+            </View>
+          ) : null
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Feather
-              name="map"
-              size={48}
-              color={theme.textSecondary}
-              style={{ marginBottom: Spacing.md }}
-            />
-            <ThemedText
-              type="h4"
-              style={{ color: theme.textSecondary, textAlign: "center" }}
-            >
+            <Feather name="map" size={48} color={theme.textSecondary} style={{ marginBottom: Spacing.md }} />
+            <ThemedText type="h4" style={{ color: theme.textSecondary, textAlign: "center" }}>
               No Routes
             </ThemedText>
             <ThemedText
               type="small"
-              style={{
-                color: theme.textSecondary,
-                textAlign: "center",
-                marginTop: Spacing.sm,
-              }}
+              style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}
             >
               Create a route for {selectedDate}
             </ThemedText>
@@ -687,42 +564,27 @@ export default function RouteBuilderScreen() {
         ]}
       >
         <Feather name="plus" size={22} color="white" />
-        <ThemedText
-          type="body"
-          style={{
-            color: "white",
-            fontWeight: "600",
-            marginLeft: Spacing.sm,
-          }}
-        >
+        <ThemedText type="body" style={{ color: "white", fontWeight: "600", marginLeft: Spacing.sm }}>
           Create Route
         </ThemedText>
       </Pressable>
 
+      {/* Create Route Modal */}
       <Modal
         visible={showCreateModal}
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View
-          style={[
-            styles.modalContainer,
-            { backgroundColor: theme.backgroundRoot },
-          ]}
-        >
-          <View
-            style={[
-              styles.modalHeader,
-              { borderBottomColor: theme.borderLight },
-            ]}
-          >
+        <View style={[styles.modalContainer, { backgroundColor: theme.backgroundRoot }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.borderLight }]}>
             <Pressable
               testID="button-cancel-create"
               onPress={() => {
                 setShowCreateModal(false);
                 setCreateRouteName("");
-                setCreateRepEmail("");
+                setSelectedRepEmail("");
+                setSelectedRepName("");
               }}
             >
               <ThemedText type="body" style={{ color: theme.primary }}>
@@ -738,13 +600,7 @@ export default function RouteBuilderScreen() {
             contentContainerStyle={styles.modalContent}
             keyboardShouldPersistTaps="handled"
           >
-            <ThemedText
-              type="small"
-              style={{
-                color: theme.textSecondary,
-                marginBottom: Spacing.lg,
-              }}
-            >
+            <ThemedText type="small" style={{ color: theme.textSecondary, marginBottom: Spacing.lg }}>
               Date: {selectedDate}
             </ThemedText>
 
@@ -756,15 +612,44 @@ export default function RouteBuilderScreen() {
               testID="input-route-name"
             />
 
-            <FormInput
-              label="Assign to Rep (email)"
-              value={createRepEmail}
-              onChangeText={setCreateRepEmail}
-              placeholder="rep@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              testID="input-rep-email"
-            />
+            {/* Technician Dropdown */}
+            <ThemedText type="small" style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+              Assign Technician
+            </ThemedText>
+            <Pressable
+              testID="button-select-rep"
+              onPress={() => setShowRepPicker(true)}
+              style={[
+                styles.repPickerBtn,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Feather name="user" size={16} color={selectedRepEmail ? theme.primary : theme.textSecondary} />
+              <ThemedText
+                type="body"
+                style={{
+                  flex: 1,
+                  marginLeft: Spacing.sm,
+                  color: selectedRepEmail ? theme.text : theme.textSecondary,
+                }}
+              >
+                {selectedRepName || selectedRepEmail || "Select a technician..."}
+              </ThemedText>
+              <Feather name="chevron-down" size={16} color={theme.textSecondary} />
+            </Pressable>
+            {selectedRepEmail ? (
+              <Pressable
+                onPress={() => { setSelectedRepEmail(""); setSelectedRepName(""); }}
+                style={{ alignSelf: "flex-end", marginTop: Spacing.xs }}
+              >
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                  Clear
+                </ThemedText>
+              </Pressable>
+            ) : null}
 
             <Button
               onPress={handleCreateRoute}
@@ -777,6 +662,88 @@ export default function RouteBuilderScreen() {
         </View>
       </Modal>
 
+      {/* Rep Picker Modal */}
+      <Modal
+        visible={showRepPicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowRepPicker(false)}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: theme.backgroundRoot }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.borderLight }]}>
+            <Pressable testID="button-cancel-rep-picker" onPress={() => setShowRepPicker(false)}>
+              <ThemedText type="body" style={{ color: theme.primary }}>
+                Cancel
+              </ThemedText>
+            </Pressable>
+            <ThemedText type="h3">Select Technician</ThemedText>
+            <View style={{ width: 50 }} />
+          </View>
+
+          <FlatList
+            data={users}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.modalListContent}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Feather name="users" size={40} color={theme.textSecondary} />
+                <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md, textAlign: "center" }}>
+                  No team members found
+                </ThemedText>
+              </View>
+            }
+            renderItem={({ item }) => {
+              const isSelected = item.email === selectedRepEmail;
+              return (
+                <Pressable
+                  testID={`rep-option-${item.email}`}
+                  onPress={() => {
+                    setSelectedRepEmail(item.email);
+                    setSelectedRepName(item.name || item.email);
+                    setShowRepPicker(false);
+                  }}
+                  style={[
+                    styles.repOption,
+                    {
+                      backgroundColor: isSelected ? `${theme.primary}15` : theme.backgroundDefault,
+                      borderColor: isSelected ? theme.primary : theme.borderLight,
+                    },
+                  ]}
+                >
+                  <View style={[styles.repAvatar, { backgroundColor: isSelected ? theme.primary : theme.backgroundSecondary }]}>
+                    <ThemedText
+                      type="small"
+                      style={{ color: isSelected ? "#fff" : theme.textSecondary, fontWeight: "700" }}
+                    >
+                      {(item.name || item.email).charAt(0).toUpperCase()}
+                    </ThemedText>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {item.name ? (
+                      <ThemedText type="body" style={{ fontWeight: "600" }}>
+                        {item.name}
+                      </ThemedText>
+                    ) : null}
+                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                      {item.email}
+                    </ThemedText>
+                    {item.role ? (
+                      <ThemedText type="small" style={{ color: theme.primary, fontSize: 11, marginTop: 1 }}>
+                        {item.role}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  {isSelected ? (
+                    <Feather name="check-circle" size={20} color={theme.primary} />
+                  ) : null}
+                </Pressable>
+              );
+            }}
+          />
+        </View>
+      </Modal>
+
+      {/* Add Stop Modal */}
       <Modal
         visible={showAddStopModal}
         animationType="slide"
@@ -786,18 +753,8 @@ export default function RouteBuilderScreen() {
           setAddStopRouteId(null);
         }}
       >
-        <View
-          style={[
-            styles.modalContainer,
-            { backgroundColor: theme.backgroundRoot },
-          ]}
-        >
-          <View
-            style={[
-              styles.modalHeader,
-              { borderBottomColor: theme.borderLight },
-            ]}
-          >
+        <View style={[styles.modalContainer, { backgroundColor: theme.backgroundRoot }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.borderLight }]}>
             <Pressable
               testID="button-cancel-add-stop"
               onPress={() => {
@@ -809,7 +766,14 @@ export default function RouteBuilderScreen() {
                 Close
               </ThemedText>
             </Pressable>
-            <ThemedText type="h3">Add Stop</ThemedText>
+            <View style={{ alignItems: "center" }}>
+              <ThemedText type="h3">Add Stop</ThemedText>
+              {unscheduledCount > 0 ? (
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                  {unscheduledCount} sold job{unscheduledCount !== 1 ? "s" : ""} unscheduled
+                </ThemedText>
+              ) : null}
+            </View>
             <View style={{ width: 50 }} />
           </View>
 
@@ -825,28 +789,13 @@ export default function RouteBuilderScreen() {
               contentContainerStyle={styles.modalListContent}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Feather
-                    name="inbox"
-                    size={48}
-                    color={theme.textSecondary}
-                    style={{ marginBottom: Spacing.md }}
-                  />
-                  <ThemedText
-                    type="h4"
-                    style={{
-                      color: theme.textSecondary,
-                      textAlign: "center",
-                    }}
-                  >
-                    No Unscheduled Leads
+                  <Feather name="inbox" size={48} color={theme.textSecondary} style={{ marginBottom: Spacing.md }} />
+                  <ThemedText type="h4" style={{ color: theme.textSecondary, textAlign: "center" }}>
+                    No Unscheduled Jobs
                   </ThemedText>
                   <ThemedText
                     type="small"
-                    style={{
-                      color: theme.textSecondary,
-                      textAlign: "center",
-                      marginTop: Spacing.sm,
-                    }}
+                    style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}
                   >
                     All sold leads have been scheduled
                   </ThemedText>
@@ -862,19 +811,9 @@ export default function RouteBuilderScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  dateRow: {
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.sm,
-    paddingBottom: Spacing.md,
-  },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  dateRow: { paddingHorizontal: Spacing.lg, gap: Spacing.sm, paddingBottom: Spacing.md },
   dateButton: {
     width: 60,
     height: 64,
@@ -884,53 +823,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 2,
   },
-  listContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    flexGrow: 1,
-  },
-  routeCard: {
+  unscheduledBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
     marginBottom: Spacing.md,
   },
-  routeHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  routeHeaderLeft: {
-    flex: 1,
-    marginRight: Spacing.sm,
-  },
-  routeHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  routeMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
-    marginTop: Spacing.xs,
-  },
-  repRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  routeExpanded: {
-    marginTop: Spacing.sm,
-  },
-  divider: {
-    height: 1,
-    marginBottom: Spacing.sm,
-  },
+  listContent: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, flexGrow: 1 },
+  routeCard: { marginBottom: Spacing.md },
+  routeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  routeHeaderLeft: { flex: 1, marginRight: Spacing.sm },
+  routeHeaderRight: { flexDirection: "row", alignItems: "center" },
+  routeMeta: { flexDirection: "row", alignItems: "center", gap: Spacing.md, marginTop: Spacing.xs },
+  repRow: { flexDirection: "row", alignItems: "center" },
+  routeExpanded: { marginTop: Spacing.sm },
+  divider: { height: 1, marginBottom: Spacing.sm },
   stopRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: Spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  stopOrderContainer: {
-    marginRight: Spacing.md,
-  },
+  stopOrderContainer: { marginRight: Spacing.md },
   stopOrderBadge: {
     width: 28,
     height: 28,
@@ -938,10 +854,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  stopInfo: {
-    flex: 1,
-    gap: 2,
-  },
+  stopInfo: { flex: 1, gap: 2 },
   stopToggle: {
     width: 36,
     height: 36,
@@ -950,18 +863,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: Spacing.sm,
   },
-  routeActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
-  },
+  routeActions: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm, marginTop: Spacing.md },
   actionBtn: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.full,
+  },
+  countBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    marginLeft: Spacing.xs,
   },
   fab: {
     position: "absolute",
@@ -972,14 +889,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     borderRadius: BorderRadius.full,
   },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: Spacing["5xl"],
-  },
-  modalContainer: {
-    flex: 1,
-  },
+  emptyContainer: { alignItems: "center", justifyContent: "center", paddingVertical: Spacing["5xl"] },
+  modalContainer: { flex: 1 },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -988,18 +899,35 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
   },
-  modalScroll: {
-    flex: 1,
+  modalScroll: { flex: 1 },
+  modalContent: { padding: Spacing.lg },
+  modalListContent: { padding: Spacing.lg, flexGrow: 1 },
+  saveButton: { marginTop: Spacing.lg },
+  fieldLabel: { fontSize: 13, fontWeight: "600", marginBottom: Spacing.sm, marginTop: Spacing.md },
+  repPickerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    gap: Spacing.xs,
   },
-  modalContent: {
-    padding: Spacing.lg,
+  repOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+    gap: Spacing.md,
   },
-  modalListContent: {
-    padding: Spacing.lg,
-    flexGrow: 1,
-  },
-  saveButton: {
-    marginTop: Spacing.lg,
+  repAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
   unscheduledCard: {
     flexDirection: "row",
@@ -1009,26 +937,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: Spacing.md,
   },
-  unscheduledInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  contactRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  servicesRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.xs,
-    marginTop: 2,
-  },
-  serviceChip: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.full,
-  },
-  addStopIcon: {
-    marginLeft: Spacing.md,
-  },
+  unscheduledInfo: { flex: 1, gap: 4 },
+  contactRow: { flexDirection: "row", alignItems: "center" },
+  servicesRow: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.xs, marginTop: 2 },
+  serviceChip: { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: BorderRadius.full },
+  addStopIcon: { marginLeft: Spacing.md },
 });
