@@ -2,21 +2,18 @@ import React from "react";
 import { View, StyleSheet, Image } from "react-native";
 
 import { ThemedText } from "@/components/ThemedText";
-import { useTheme } from "@/hooks/useTheme";
 import { Spacing } from "@/constants/theme";
+
+const logo = require("../../assets/images/logo.png");
 
 interface HeaderTitleProps {
   title: string;
 }
 
 export function HeaderTitle({ title }: HeaderTitleProps) {
-  const { theme } = useTheme();
-
   return (
     <View style={styles.container}>
-      <View style={[styles.logo, { backgroundColor: theme.primary }]}>
-        <ThemedText style={styles.logoText}>WW</ThemedText>
-      </View>
+      <Image source={logo} style={styles.logo} resizeMode="contain" />
       <ThemedText style={styles.title}>{title}</ThemedText>
     </View>
   );
@@ -29,17 +26,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   logo: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
     marginRight: Spacing.sm,
-  },
-  logoText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#fff",
   },
   title: {
     fontSize: 17,

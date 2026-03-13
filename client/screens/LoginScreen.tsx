@@ -7,7 +7,6 @@ import Animated, {
   useSharedValue,
   withSpring,
   withSequence,
-  withDelay,
   FadeIn,
 } from "react-native-reanimated";
 
@@ -15,6 +14,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
 import { BorderRadius, Spacing, Shadows } from "@/constants/theme";
+
+const logo = require("../../assets/images/logo.png");
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -39,11 +40,7 @@ export default function LoginScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.primary }]}>
       <Animated.View entering={FadeIn.delay(200).duration(600)} style={styles.logoContainer}>
-        <View style={[styles.logoBackground, { backgroundColor: "#fff" }]}>
-          <ThemedText type="h1" style={[styles.logoText, { color: theme.primary }]}>
-            HH
-          </ThemedText>
-        </View>
+        <Image source={logo} style={styles.logoImage} resizeMode="contain" />
         <ThemedText type="h2" style={styles.appName}>
           Healthy Home
         </ThemedText>
@@ -94,17 +91,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: Spacing["5xl"],
   },
-  logoBackground: {
-    width: 100,
-    height: 100,
+  logoImage: {
+    width: 120,
+    height: 120,
     borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
     marginBottom: Spacing.lg,
-  },
-  logoText: {
-    fontSize: 40,
-    fontWeight: "800",
   },
   appName: {
     color: "#fff",
