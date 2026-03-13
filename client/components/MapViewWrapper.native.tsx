@@ -17,11 +17,13 @@ interface MapViewWrapperProps {
   showsMyLocationButton?: boolean;
   mapType?: string;
   userInterfaceStyle?: "dark" | "light";
+  webMarkers?: any[];
+  webSelectedLocation?: any;
 }
 
 export const MapViewWrapper = forwardRef<MapView, MapViewWrapperProps>(
   (props, ref) => {
-    const { children, style, ...restProps } = props;
+    const { children, style, webMarkers: _wm, webSelectedLocation: _wsl, ...restProps } = props;
     return (
       <MapView
         ref={ref}

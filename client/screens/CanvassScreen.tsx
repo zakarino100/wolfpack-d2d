@@ -153,8 +153,7 @@ export default function CanvassScreen() {
 
   const animatedOtherBtnsStyle = useAnimatedStyle(() => ({
     opacity: interpolate(searchExpand.value, [0, 0.3], [1, 0]),
-    pointerEvents: searchOpen ? "none" : "auto",
-  } as any));
+  }));
 
   const loadServices = async () => {
     try {
@@ -674,6 +673,15 @@ export default function CanvassScreen() {
         showsMyLocationButton={false}
         mapType="standard"
         userInterfaceStyle={isDark ? "dark" : "light"}
+        webMarkers={pins
+          .filter((p) => p.latitude && p.longitude)
+          .map((p) => ({
+            id: p.id,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            status: p.status || p.lead?.status || "new",
+          }))}
+        webSelectedLocation={selectedLocation}
       >
         {selectedLocation ? (
           <MapMarker
@@ -701,19 +709,6 @@ export default function CanvassScreen() {
         )}
       </MapViewWrapper>
 
-      {Platform.OS === "web" && !showForm ? (
-        <View style={styles.webMapOverlay} pointerEvents="none">
-          <View style={[styles.webMapHint, { backgroundColor: `${theme.primary}CC` }]}>
-            <Feather name="map-pin" size={20} color="white" />
-            <ThemedText type="body" style={{ color: "white", fontWeight: "600", marginLeft: Spacing.sm }}>
-              Tap "Drop Pin" to log a door
-            </ThemedText>
-          </View>
-          <ThemedText type="small" style={[styles.webMapSubhint, { color: theme.textSecondary }]}>
-            Use Expo Go on your phone for the full map experience
-          </ThemedText>
-        </View>
-      ) : null}
 
       <View style={[styles.searchContainer, { top: insets.top + Spacing.md }]}>
         <Animated.View
@@ -756,7 +751,10 @@ export default function CanvassScreen() {
           </Animated.View>
         </Animated.View>
 
-        <Animated.View style={[styles.mapBtnsRow, animatedOtherBtnsStyle]}>
+        <Animated.View
+          style={[styles.mapBtnsRow, animatedOtherBtnsStyle]}
+          pointerEvents={searchOpen ? "none" : "auto"}
+        >
           <Pressable
             onPress={handleUseMyLocation}
             style={[styles.locationBtn, { backgroundColor: theme.backgroundRoot }, Shadows.md]}
@@ -1260,27 +1258,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-  },
-  webMapOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.md,
-  },
-  webMapHint: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.full,
-  },
-  webMapSubhint: {
-    textAlign: "center",
-    paddingHorizontal: Spacing.xl,
   },
 });
 
