@@ -26,9 +26,9 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   logo: {
-    width: 30,
-    height: 30,
-    borderRadius: 6,
+    width: 44,
+    height: 44,
+    borderRadius: 8,
     marginRight: Spacing.sm,
   },
   title: {
