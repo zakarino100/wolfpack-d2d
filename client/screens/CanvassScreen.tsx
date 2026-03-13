@@ -113,7 +113,8 @@ export default function CanvassScreen() {
   const markerPressedRef = useRef(false);
 
   const [outcome, setOutcome] = useState<TouchOutcome | null>(null);
-  const [homeownerName, setHomeownerName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [servicesInterested, setServicesInterested] = useState<string[]>([]);
@@ -366,7 +367,9 @@ export default function CanvassScreen() {
     const existing = await checkExistingLead(finalAddress);
     setExistingLead(existing);
     if (existing) {
-      setHomeownerName(existing.homeowner_name || "");
+      const nameParts = (existing.homeowner_name || "").trim().split(/\s+/);
+      setFirstName(nameParts[0] || "");
+      setLastName(nameParts.slice(1).join(" ") || "");
       setPhone(existing.phone || "");
       setEmail(existing.email || "");
       setServicesInterested(existing.services_interested || []);
@@ -410,7 +413,9 @@ export default function CanvassScreen() {
         const existing = await checkExistingLead(finalAddress);
         setExistingLead(existing);
         if (existing) {
-          setHomeownerName(existing.homeowner_name || "");
+          const nameParts = (existing.homeowner_name || "").trim().split(/\s+/);
+          setFirstName(nameParts[0] || "");
+          setLastName(nameParts.slice(1).join(" ") || "");
           setPhone(existing.phone || "");
           setEmail(existing.email || "");
           setServicesInterested(existing.services_interested || []);
@@ -496,7 +501,8 @@ export default function CanvassScreen() {
 
   const resetForm = () => {
     setOutcome(null);
-    setHomeownerName("");
+    setFirstName("");
+    setLastName("");
     setPhone("");
     setEmail("");
     setServicesInterested([]);
@@ -516,6 +522,29 @@ export default function CanvassScreen() {
     if (!address) {
       Alert.alert("Missing Info", "No address available");
       return;
+    }
+
+    if (outcome === "sold") {
+      if (!firstName.trim()) {
+        Alert.alert("Required for Sale", "Customer first name is required");
+        return;
+      }
+      if (!lastName.trim()) {
+        Alert.alert("Required for Sale", "Customer last name is required");
+        return;
+      }
+      if (!phone.trim()) {
+        Alert.alert("Required for Sale", "Customer phone number is required");
+        return;
+      }
+      if (!email.trim()) {
+        Alert.alert("Required for Sale", "Customer email is required");
+        return;
+      }
+      if (servicesInterested.length === 0) {
+        Alert.alert("Required for Sale", "At least one service must be selected");
+        return;
+      }
     }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -541,7 +570,7 @@ export default function CanvassScreen() {
           zip: address.zip,
           latitude: address.latitude,
           longitude: address.longitude,
-          homeowner_name: homeownerName || null,
+          homeowner_name: [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") || null,
           phone: phone || null,
           email: email || null,
           services_interested: servicesInterested.length > 0 ? servicesInterested : null,
@@ -580,7 +609,7 @@ export default function CanvassScreen() {
           zip: address.zip,
           latitude: address.latitude,
           longitude: address.longitude,
-          homeowner_name: homeownerName || null,
+          homeowner_name: [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") || null,
           phone: phone || null,
           email: email || null,
           services_interested: servicesInterested.length > 0 ? servicesInterested : null,
@@ -917,15 +946,27 @@ export default function CanvassScreen() {
             />
 
             <>
-                <FormInput
-                  label="Homeowner Name"
-                  value={homeownerName}
-                  onChangeText={setHomeownerName}
-                  placeholder="John Smith"
-                />
+                <View style={{ flexDirection: "row", gap: Spacing.sm }}>
+                  <View style={{ flex: 1 }}>
+                    <FormInput
+                      label={outcome === "sold" ? "First Name *" : "First Name"}
+                      value={firstName}
+                      onChangeText={setFirstName}
+                      placeholder="John"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <FormInput
+                      label={outcome === "sold" ? "Last Name *" : "Last Name"}
+                      value={lastName}
+                      onChangeText={setLastName}
+                      placeholder="Smith"
+                    />
+                  </View>
+                </View>
 
                 <FormInput
-                  label="Phone"
+                  label={outcome === "sold" ? "Phone *" : "Phone"}
                   value={phone}
                   onChangeText={setPhone}
                   placeholder="(555) 123-4567"
@@ -933,7 +974,7 @@ export default function CanvassScreen() {
                 />
 
                 <FormInput
-                  label="Email"
+                  label={outcome === "sold" ? "Email *" : "Email"}
                   value={email}
                   onChangeText={setEmail}
                   placeholder="john@example.com"
@@ -988,6 +1029,8 @@ export default function CanvassScreen() {
                 onPress={() => {
                   setShowForm(false);
                   resetForm();
+                  setSelectedLocation(null);
+                  setAddress(null);
                 }}
                 style={styles.cancelBtn}
               >

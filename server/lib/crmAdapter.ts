@@ -368,6 +368,25 @@ export async function getMedia(leadId: string) {
   return mediaWithUrls;
 }
 
+export async function insertMedia(record: {
+  lead_id: string;
+  rep_email: string;
+  type: string;
+  storage_bucket: string;
+  storage_path: string;
+  mime_type?: string;
+  original_filename?: string;
+  size_bytes?: number;
+}) {
+  const { data, error } = await supabase
+    .from("d2d_media")
+    .insert(record)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function getServices() {
   const { data, error } = await supabase
     .from("d2d_services")

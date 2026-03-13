@@ -19,6 +19,7 @@ import {
   getTouches,
   getQuotes,
   getMedia,
+  insertMedia,
   getServices,
   findLeadByAddressOrLatLng,
   createPin,
@@ -611,6 +612,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ media });
     } catch (error) {
       res.status(500).json({ error: "Failed to get media" });
+    }
+  });
+
+  app.post("/api/leads/:id/media/upload", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const leadId = req.params.id;
+      const { base64, filename, mime_type, type = "photo" } = req.body;
+
+      if (!base64 || !filename) {
+        return res.status(400).json({ error: "base64 and filename are required" });
+      }
+
+      const buffer = Buffer.from(base64, "base64");
+      const ext = filename.split(".").pop() || "jpg";
+      const storagePath = `leads/${leadId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const bucket = "business-media";
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(storagePath, buffer, {
+          contentType: mime_type || "image/jpeg",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        return res.status(500).json({ error: "Failed to upload file to storage" });
+      }
+
+      const record = await insertMedia({
+        lead_id: leadId,
+        rep_email: user.email,
+        type,
+        storage_bucket: bucket,
+        storage_path: storagePath,
+        mime_type: mime_type || "image/jpeg",
+        original_filename: filename,
+        size_bytes: buffer.length,
+      });
+
+      const { data: signedData } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(storagePath, 3600);
+
+      res.json({ media: { ...record, signed_url: signedData?.signedUrl || null } });
+    } catch (error) {
+      console.error("Failed to upload media:", error);
+      res.status(500).json({ error: "Failed to upload media" });
     }
   });
 

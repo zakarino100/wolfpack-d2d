@@ -9,7 +9,9 @@ import {
   Platform,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -75,6 +77,7 @@ export default function LeadDetailScreen() {
   const [touchOutcome, setTouchOutcome] = useState<TouchOutcome | null>(null);
   const [touchNotes, setTouchNotes] = useState("");
   const [touchSaving, setTouchSaving] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   const [services, setServices] = useState<Service[]>([]);
 
@@ -265,6 +268,62 @@ export default function LeadDetailScreen() {
       Alert.alert("Error", "Failed to save touch");
     } finally {
       setTouchSaving(false);
+    }
+  };
+
+  const uploadMedia = async (source: "camera" | "gallery") => {
+    try {
+      let result: ImagePicker.ImagePickerResult;
+      if (source === "camera") {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission Required", "Camera access is needed to take photos.");
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ["images"] as any,
+          quality: 0.8,
+          base64: true,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission Required", "Photo library access is needed to select photos.");
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"] as any,
+          quality: 0.8,
+          base64: true,
+        });
+      }
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert("Error", "Could not read image data");
+        return;
+      }
+
+      setUploadingMedia(true);
+      const ext = asset.uri.split(".").pop() || "jpg";
+      const filename = `photo-${Date.now()}.${ext}`;
+      const mime = asset.mimeType || "image/jpeg";
+
+      await apiRequest("POST", `/api/leads/${leadId}/media/upload`, {
+        base64: asset.base64,
+        filename,
+        mime_type: mime,
+        type: "photo",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", leadId, "media"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Upload Failed", "Could not upload the photo. Please try again.");
+    } finally {
+      setUploadingMedia(false);
     }
   };
 
@@ -570,6 +629,34 @@ export default function LeadDetailScreen() {
 
         {activeSection === "media" ? (
           <View style={styles.section}>
+            <View style={styles.mediaActions}>
+              <Pressable
+                onPress={() => uploadMedia("camera")}
+                disabled={uploadingMedia}
+                style={[styles.mediaBtn, { backgroundColor: theme.primary }]}
+                testID="button-take-photo"
+              >
+                {uploadingMedia ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Feather name="camera" size={16} color="#fff" />
+                )}
+                <ThemedText type="small" style={{ color: "#fff", fontWeight: "600" }}>
+                  {uploadingMedia ? "Uploading..." : "Take Photo"}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => uploadMedia("gallery")}
+                disabled={uploadingMedia}
+                style={[styles.mediaBtn, { backgroundColor: theme.backgroundDefault, borderWidth: 1, borderColor: theme.primary }]}
+                testID="button-choose-photo"
+              >
+                <Feather name="image" size={16} color={theme.primary} />
+                <ThemedText type="small" style={{ color: theme.primary, fontWeight: "600" }}>
+                  Choose from Library
+                </ThemedText>
+              </Pressable>
+            </View>
             {loadingMedia ? (
               <LoadingState size="small" />
             ) : (
@@ -761,6 +848,21 @@ const styles = StyleSheet.create({
   },
   section: {
     minHeight: 100,
+  },
+  mediaActions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  mediaBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.xs,
   },
   emptySection: {
     padding: Spacing["2xl"],
