@@ -567,26 +567,9 @@ export default function CanvassScreen() {
 
       loadPins();
       setSelectedLocation(null);
-
-      Alert.alert("Saved!", "Pin saved successfully", [
-        {
-          text: "Next House",
-          onPress: () => {
-            resetForm();
-            setShowForm(false);
-            setAddress(null);
-          },
-        },
-        {
-          text: "Stay Here",
-          style: "cancel",
-          onPress: () => {
-            resetForm();
-            setShowForm(false);
-            setAddress(null);
-          },
-        },
-      ]);
+      resetForm();
+      setShowForm(false);
+      setAddress(null);
     } catch (error) {
       const offlinePayload = {
         client_generated_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -964,7 +947,7 @@ export default function CanvassScreen() {
                   onChange={setServicesInterested}
                 />
 
-                {outcome === "quoted" || outcome === "booked" ? (
+                {outcome === "quoted" || outcome === "booked" || outcome === "sold" ? (
                   <QuoteBuilder
                     services={services}
                     lineItems={quoteLineItems}
