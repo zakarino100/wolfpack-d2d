@@ -23,7 +23,7 @@ A mobile-first D2D canvassing app (formerly Wolfpack D2D) for Healthy Home field
 - `App.tsx` - Root component with AuthProvider, ErrorBoundary
 - `navigation/RootStackNavigator.tsx` - Role-based routing (admin → AdminTabNavigator, rep → MainTabNavigator)
 - `navigation/MainTabNavigator.tsx` - Rep tabs: Canvass, Leads, Route, Follow-ups, Profile
-- `navigation/AdminTabNavigator.tsx` - Admin tabs: Live Map, Routes, Leads, Analytics, Team
+- `navigation/AdminTabNavigator.tsx` - Admin tabs: Live Map, Canvass, Routes, Leads, Analytics, Team
 - `screens/` - Main app screens
   - `CanvassScreen.tsx` - Map-based canvassing with pin dropping
   - `LeadsScreen.tsx` - Rep's leads list

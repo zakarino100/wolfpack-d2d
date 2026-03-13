@@ -9,11 +9,13 @@ import RouteBuilderScreen from "@/screens/admin/RouteBuilderScreen";
 import AllLeadsScreen from "@/screens/admin/AllLeadsScreen";
 import AnalyticsScreen from "@/screens/admin/AnalyticsScreen";
 import TeamScreen from "@/screens/admin/TeamScreen";
+import CanvassScreen from "@/screens/CanvassScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useTheme } from "@/hooks/useTheme";
 
 export type AdminTabParamList = {
   LiveMapTab: undefined;
+  CanvassTab: undefined;
   RouteBuilderTab: undefined;
   AllLeadsTab: undefined;
   AnalyticsTab: undefined;
@@ -63,6 +65,17 @@ export default function AdminTabNavigator() {
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Feather name="map" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="CanvassTab"
+        component={CanvassScreen}
+        options={{
+          title: "Canvass",
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="map-pin" size={size} color={color} />
           ),
         }}
       />
