@@ -101,6 +101,11 @@ A mobile-first D2D canvassing app (formerly Wolfpack D2D) for Healthy Home field
 - `DELETE /api/routes/:id/stops/:stopId` - Remove stop
 - `GET /api/routes/:id/sms` - Get SMS-formatted route text
 
+### Backend Jobs Proxy (HH Backend → Canvassing App)
+- `GET /api/backend/jobs` - List all HH backend jobs (query param: ?status=scheduled|completed|canceled|rescheduled)
+- `PUT /api/backend/jobs/:id` - Update HH backend job (schedule date, technician, notes, status)
+- `GET /api/backend/technicians` - List technicians from HH backend (role=technician users)
+
 ### Rep Locations
 - `POST /api/rep-locations` - Rep sends GPS coordinates
 - `GET /api/rep-locations/live` - Admin gets active rep positions (last 5 min)
@@ -178,7 +183,7 @@ The canvassing app auto-syncs with the Healthy Home backend CRM at `https://heal
 ## Key Features
 - **Rep Canvassing**: Drop pins on map, log leads with status/services/notes
 - **Follow-up Calendar**: Monthly calendar view with dot indicators, tap to see/manage follow-ups
-- **Route Following**: View assigned route, get directions, toggle stop completion
+- **Route Following**: View assigned route, get directions, toggle stop completion; "Jobs" tab shows HH backend jobs with schedule/edit modals
 - **Location Sharing**: Opt-in GPS sharing every 60s when enabled
 - **Admin Live Map**: All pins + live rep positions with status filtering
 - **Route Builder**: Create routes, add sold leads as stops, assign to reps, share via SMS

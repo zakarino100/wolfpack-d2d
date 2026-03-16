@@ -1446,6 +1446,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================
+  // Backend Jobs Proxy
+  // (Proxies to Healthy Home backend — read/write jobs for scheduling)
+  // Confirmed valid backend job status enum: scheduled, completed, canceled, rescheduled
+  // Unscheduled jobs = any job with scheduledAt=null (no separate status for "unscheduled")
+  // ========================
+  const HH_JOB_BASE = process.env.HH_BACKEND_URL || "https://healthy-home-backend.replit.app";
+
+  app.get("/api/backend/jobs", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const params = new URLSearchParams();
+      if (req.query.status) params.set("status", req.query.status as string);
+      const url = `${HH_JOB_BASE}/api/jobs${params.toString() ? `?${params}` : ""}`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      console.warn("[backend/jobs] fetch error:", err?.message);
+      res.status(502).json({ error: "Failed to fetch jobs from backend" });
+    }
+  });
+
+  app.put("/api/backend/jobs/:id", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const response = await fetch(`${HH_JOB_BASE}/api/jobs/${req.params.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+        signal: AbortSignal.timeout(10000),
+      });
+      const data = await response.json();
+      res.status(response.ok ? 200 : 400).json(data);
+    } catch (err: any) {
+      console.warn("[backend/jobs] put error:", err?.message);
+      res.status(502).json({ error: "Failed to update job" });
+    }
+  });
+
+  app.get("/api/backend/technicians", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const response = await fetch(`${HH_JOB_BASE}/api/users?role=technician`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      const data = await response.json();
+      res.json(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.warn("[backend/technicians] fetch error:", err?.message);
+      res.status(502).json({ error: "Failed to fetch technicians" });
+    }
+  });
+
+  // ========================
   // User Management
   // ========================
 

@@ -1,0 +1,309 @@
+# Healthy Home Canvassing App — Routes Tab Backend Sync Spec
+**Version:** 1.1 (patched per Robin review)
+**Target:** Replit Agent (Canvassing App project)  
+**Depends on:** Healthy Home OS backend must be running with jobs and scheduling endpoints intact
+
+---
+
+## READ THIS FIRST — Instructions for Replit Agent
+
+You are updating the **Routes tab** of the Healthy Home Canvassing App so it reads from and writes to the existing Healthy Home backend.
+
+The backend is the **single source of truth** for all jobs, routes, scheduling, and technician assignments. Your job is to make the canvassing app surface that data correctly — not reinvent it.
+
+**Build in the order listed. Do not skip phases.**
+
+---
+
+## Safety / Data Protection Rules
+
+These rules apply before you touch a single line of code.
+
+- Do not delete any job records, route records, assignments, or schedule data
+- Do not create a parallel or local-only scheduling system in the canvassing app
+- Do not overwrite backend schedule data without an explicit confirmed save action
+- Do not create duplicate job records
+- Do not change any backend business logic, status logic, scheduling logic, or write behavior from within the canvassing app project
+- Do not remove or alter existing working backend routes, API endpoints, or models
+- Do not invent new backend endpoints — use existing ones (listed in Phase 1)
+- Do not change backend job status semantics to match this spec — if the backend uses different status values or filter patterns than shown here, adapt the canvassing app to match the backend's real behavior
+- All changes to the canvassing app must be additive and backward-compatible
+- If the existing Routes tab already fetches any data correctly, preserve that behavior and extend it — do not replace it
+- If the Routes tab already has route assignment or route object behavior, preserve that structure — do not convert it into a plain jobs list
+
+---
+
+## Build Phase 0 — Inspect Before Building
+
+Before writing any code, do the following in order:
+
+1. Read the current Routes tab component file(s) in the canvassing app
+2. Read the existing backend jobs API (`src/routes/jobs.js`) to confirm actual status values and supported query filters
+3. Identify what data the Routes tab currently fetches (if any) and from where
+4. Identify what is hardcoded, mocked, or local-only
+5. Identify what is already correctly pulling from the backend
+6. Identify whether the Routes tab has any existing route assignment or route object behavior
+7. Write a short comment block at the top of the Routes component summarizing what you found:
+
+```js
+/*
+ * ROUTES TAB AUDIT — [date]
+ * Already working: [list]
+ * Hardcoded / mocked: [list]
+ * Missing backend connection: [list]
+ * Existing route assignment behavior: [describe or "none found"]
+ * Backend job status values confirmed: [list actual values from backend]
+ * Backend filter patterns confirmed: [list what actually works]
+ * Will preserve: [list]
+ * Will change: [list]
+ */
+```
+
+Do not begin Phase 1 until this audit comment exists.
+
+---
+
+## Build Phase 1 — Backend API Contract
+
+The canvassing app must use existing backend endpoints. Do not create new backend endpoints unless one of these is genuinely missing — and if missing, add a comment flagging it before creating it.
+
+### Intended endpoints:
+
+| Method | Endpoint | Used for |
+|---|---|---|
+| GET | `/api/jobs?status=scheduled` | Fetch all scheduled jobs for calendar view |
+| GET | `/api/jobs?status=sold&scheduledAt=null` | Fetch sold-but-not-scheduled jobs |
+| PUT | `/api/jobs/:id` | Update job (schedule date, technician, status) |
+| GET | `/api/users?role=technician` | Fetch technician list for assignment dropdown |
+
+**Important — match the backend's actual behavior, not this spec's assumptions:**
+
+During Phase 0, confirm whether `?status=sold&scheduledAt=null` is actually supported by the backend jobs query. If the backend uses different status values (e.g. `won` instead of `sold`) or does not support `scheduledAt=null` filtering, do both of the following:
+1. Adapt the canvassing app fetch calls to match what the backend actually supports
+2. Add client-side filtering as a safety check regardless:
+   ```js
+   // Client-side safety filter — always apply after fetch
+   jobs.filter(j => !j.scheduledAt && /* match backend's sold status value */)
+   ```
+
+Do not change backend filtering logic to match this spec.
+
+### Data shape expected from `GET /api/jobs`:
+
+Each job object must include at minimum:
+```json
+{
+  "id": "string",
+  "customerId": "string",
+  "status": "string",
+  "serviceType": "string",
+  "scheduledAt": "ISO string or null",
+  "technicianId": "string or null",
+  "technician": { "id": "string", "name": "string" },
+  "customer": {
+    "firstName": "string",
+    "lastName": "string",
+    "address": "string",
+    "city": "string"
+  },
+  "soldPrice": 0,
+  "notes": "string or null"
+}
+```
+
+**The only permitted backend change in this spec:** If `customer` and `technician` are not currently included as nested objects in job responses, add `include: { customer: true, technician: true }` to the existing Prisma jobs query in `src/routes/jobs.js`. Do not alter status logic, scheduling logic, write behavior, filter behavior, or route assignment logic on the backend.
+
+---
+
+## Build Phase 2 — Sold-But-Not-Scheduled Job List
+
+**File:** Routes tab component in the canvassing app
+
+This section of the Routes tab shows jobs that have been sold but have no scheduled date yet.
+
+### 2A. Fetch sold-unscheduled jobs from backend
+
+On component mount and on every manual refresh, fetch using the confirmed backend filter pattern from Phase 0. Always apply client-side filtering as a backup:
+
+```js
+const res = await fetch(`${BACKEND_URL}/api/jobs?[confirmed filter from Phase 0 audit]`)
+const jobs = await res.json()
+// Client-side safety filter — always apply
+const unscheduled = jobs.filter(j => !j.scheduledAt)
+```
+
+Store in state: `const [unscheduledJobs, setUnscheduledJobs] = useState([])`
+
+Show a loading indicator while fetching. Show an error message if fetch fails.
+
+### 2B. Display the unscheduled job list
+
+Render each unscheduled job as a card showing:
+- Customer full name
+- Service type
+- Customer address and city
+- Sold price
+- A **"Schedule Job"** button
+
+If the list is empty, show: `"No jobs waiting to be scheduled."`
+
+If the Routes tab already has existing route assignment behavior, display unscheduled jobs within that existing structure — do not remove route objects or route assignment UI.
+
+### 2C. Schedule Job flow
+
+When **"Schedule Job"** is clicked on a card:
+
+1. Open a scheduling modal (inline, not a new page)
+2. Modal shows a **summary of the job** being scheduled (customer name, service type, address)
+3. Modal contains:
+   - **Date picker** — sets `scheduledAt`
+   - **Technician dropdown** — populated from `GET /api/users?role=technician`
+   - **Notes field** — optional additional note for this scheduling action (see note handling rules below)
+4. User fills in fields, then clicks **"Confirm Schedule"** — this shows a confirmation step:
+   ```
+   "Schedule [Service Type] for [Customer Name] on [Date] with [Technician]?"
+   [Back]  [Confirm]
+   ```
+5. On **Confirm**:
+   - PUT to `/api/jobs/:id` with body containing only: `{ scheduledAt, technicianId }` plus status update if the backend expects it
+   - Do not overwrite any unrelated job fields (quotedPrice, serviceType, customerId, etc.)
+   - On success: re-fetch both job lists from backend, show toast: `"Job scheduled."`
+   - On error: show toast: `"Failed to schedule job. Please try again."` — do not update local state
+6. On **Back** or **Cancel**: close modal, no changes
+
+Do not optimistically update state before the PUT succeeds.
+
+**Notes field handling:**
+- Show a notes input in the scheduling modal for any additional context about this scheduling action
+- If the user enters a note, append it to existing job notes with a timestamp prefix: `"[Scheduled Jan 15]: [note text]"`
+- If existing notes are blank, set notes to the new text only
+- If the user leaves the notes field empty, do not modify existing job notes at all
+- Do not send the notes field in the PUT body if nothing was entered
+
+---
+
+## Build Phase 3 — Scheduled Jobs Calendar
+
+**File:** Routes tab component in the canvassing app
+
+### 3A. Fetch scheduled jobs from backend
+
+On component mount and after any scheduling or edit action:
+
+```js
+const res = await fetch(`${BACKEND_URL}/api/jobs?status=[confirmed scheduled status from Phase 0 audit]`)
+const jobs = await res.json()
+// Client-side safety filter
+const scheduled = jobs.filter(j => !!j.scheduledAt)
+```
+
+Store in state: `const [scheduledJobs, setScheduledJobs] = useState([])`
+
+### 3B. Calendar rendering
+
+Use the existing calendar component if one already exists in the app. Do not install a new calendar library if one is already present.
+
+If no calendar component exists, build a simple week-view calendar using plain CSS and React — no external libraries.
+
+Each calendar event should display:
+- Customer last name
+- Service type
+- Assigned technician name (or "Unassigned" if none)
+- Scheduled time if available
+
+### 3C. Clicking a calendar event
+
+When a scheduled job event is clicked:
+
+1. Open a job detail modal showing: customer name, address, service type, scheduled date/time, technician, notes
+2. Allow editing of: `scheduledAt`, `technicianId`, `notes`
+3. Show **Save** and **Cancel** buttons
+4. When **Save** is clicked, show a confirmation step:
+   ```
+   Changed fields summary — e.g.:
+   "Technician: John → Sarah"
+   "Date: Jan 15 → Jan 17"
+   [Cancel]  [Save Changes]
+   ```
+5. On **Save Changes**: PUT to `/api/jobs/:id` with changed fields only — not the full object
+6. On success: re-fetch both `scheduledJobs` and `unscheduledJobs` from backend, show toast: `"Job updated."`
+7. On error: show toast: `"Update failed."` — do not update local state
+
+**Notes editing rule:** If notes are changed in the edit modal, send the full updated notes string. Do not append a timestamp prefix for edits (only for scheduling actions in Phase 2). Do not duplicate content.
+
+---
+
+## Build Phase 4 — Bidirectional Sync Behavior
+
+### After any successful PUT to the backend:
+1. Re-fetch using confirmed sold-unscheduled filter → update `unscheduledJobs` state
+2. Re-fetch using confirmed scheduled filter → update `scheduledJobs` state
+3. Do not rely on local state manipulation alone — always re-fetch after a write
+
+### Manual refresh:
+Add a **Refresh** button to the Routes tab that re-fetches both job lists.
+
+### On tab focus:
+Re-fetch both lists when the Routes tab becomes active.
+
+### Auth:
+Preserve the project's existing authentication pattern (cookies, bearer token, headers, etc.) on all fetch and PUT calls. Do not bypass or replace current auth behavior.
+
+---
+
+## Build Phase 5 — Environment / Config
+
+```js
+// In .env
+VITE_BACKEND_URL=http://localhost:3001
+
+// In component
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL
+```
+
+All fetch calls use `BACKEND_URL`. If missing, show: `"Backend URL not configured. Check .env file."`
+
+---
+
+## Definition of Done
+
+- [ ] Phase 0 audit comment exists at top of Routes component and includes confirmed backend status values and filter patterns
+- [ ] Fetch calls use confirmed backend filter patterns from Phase 0 — not assumed ones
+- [ ] Client-side safety filter applied on all job list fetches
+- [ ] Unscheduled jobs list renders with customer name, service type, address, price
+- [ ] "Schedule Job" button opens modal with job summary, date picker, technician dropdown, notes field
+- [ ] Scheduling modal has a confirmation step before PUT is sent
+- [ ] Technician dropdown populated from `GET /api/users?role=technician`
+- [ ] Notes field only modifies job notes if content was entered — blank field = no notes change
+- [ ] Notes append with timestamp prefix when scheduling, not on edit
+- [ ] Scheduling PUT sends only `scheduledAt`, `technicianId`, and notes (if changed) — no unrelated fields overwritten
+- [ ] Job disappears from unscheduled list and appears on calendar after scheduling
+- [ ] Calendar shows customer name, service type, technician name per event
+- [ ] Clicking a calendar event opens a detail/edit modal
+- [ ] Edit modal shows a before/after confirmation step before saving
+- [ ] Saving calendar event edits PUTs only changed fields to backend
+- [ ] Both lists re-fetch from backend after every successful write
+- [ ] Manual Refresh button re-fetches both lists
+- [ ] All fetch calls use `VITE_BACKEND_URL` — nothing hardcoded
+- [ ] Existing auth pattern preserved on all requests
+- [ ] Existing route assignment behavior (if any) preserved
+- [ ] Loading and error states shown on all fetches
+- [ ] No duplicate job records created
+- [ ] No local-only scheduling state that diverges from backend
+
+---
+
+## Things Replit Agent Must NOT Do
+
+- Do not change backend job status values, filter logic, or scheduling logic to match this spec — adapt the app to the backend
+- Do not create a separate local scheduling system or route model disconnected from the backend
+- Do not hardcode job data, mock data, or placeholder arrays
+- Do not create new backend endpoints unless one listed in Phase 1 is confirmed missing
+- Do not change backend business logic, models, or existing route handlers
+- Do not delete or overwrite any job, route, or assignment records
+- Do not optimistically update state before a backend write succeeds
+- Do not send the full job object on PUT — send only changed fields
+- Do not overwrite unrelated job fields when scheduling (quotedPrice, serviceType, customerId, etc.)
+- Do not install a calendar library if one already exists in the project
+- Do not rebuild the entire Routes tab — audit first, extend what works, replace only what is broken
+- Do not remove existing route assignment UI if it exists — integrate alongside it
