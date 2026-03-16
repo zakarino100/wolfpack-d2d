@@ -79,6 +79,7 @@ export default function LeadsScreen() {
   const [outcome, setOutcome] = useState<TouchOutcome | null>(null);
   const [notes, setNotes] = useState("");
   const [usingLocation, setUsingLocation] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const {
@@ -103,6 +104,7 @@ export default function LeadsScreen() {
     setOutcome(null);
     setNotes("");
     setCoords(null);
+    setGeocoding(false);
   };
 
   const handleUseCurrentLocation = async () => {
@@ -151,15 +153,42 @@ export default function LeadsScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
+      // Step 1: get coordinates — use existing if available, otherwise forward-geocode
+      let resolvedCoords = coords;
+      if (!resolvedCoords) {
+        setGeocoding(true);
+        try {
+          const fullAddress = [addressLine1, city, state, zip].filter(Boolean).join(", ");
+          const geoRes = await apiRequest("GET", `/api/geocode/forward?address=${encodeURIComponent(fullAddress)}`);
+          const geoData = await geoRes.json();
+          if (geoData.latitude && geoData.longitude) {
+            resolvedCoords = { latitude: geoData.latitude, longitude: geoData.longitude };
+          }
+        } catch {
+          // Geocoding failed — proceed without coords (pin will still be created at 0,0 placeholder)
+        } finally {
+          setGeocoding(false);
+        }
+      }
+
+      // Step 2: create pin + lead together so the lead shows on the map
       const payload = {
-        client_generated_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        pin: {
+          latitude: resolvedCoords?.latitude ?? 0,
+          longitude: resolvedCoords?.longitude ?? 0,
+          address_line1: addressLine1,
+          city: city || null,
+          state: state || null,
+          zip: zip || null,
+          status: outcome,
+        },
         lead: {
           address_line1: addressLine1,
           city: city || null,
           state: state || null,
           zip: zip || null,
-          latitude: coords?.latitude || null,
-          longitude: coords?.longitude || null,
+          latitude: resolvedCoords?.latitude ?? null,
+          longitude: resolvedCoords?.longitude ?? null,
           homeowner_name: homeownerName || null,
           phone: phone || null,
           email: email || null,
@@ -176,15 +205,17 @@ export default function LeadsScreen() {
         quote: null,
       };
 
-      await apiRequest("POST", "/api/touches/create", payload);
+      await apiRequest("POST", "/api/pins/create-with-lead", payload);
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pins"] });
       setShowAddModal(false);
       resetAddForm();
-      Alert.alert("Success", "Lead created successfully");
+      Alert.alert("Lead Added", resolvedCoords ? "Lead and map pin created." : "Lead created. Address could not be geocoded — pin placed without location.");
     } catch (error) {
       Alert.alert("Error", "Failed to create lead. Please try again.");
     } finally {
       setSaving(false);
+      setGeocoding(false);
     }
   };
 
@@ -385,6 +416,13 @@ export default function LeadsScreen() {
               </ThemedText>
             </View>
 
+            <View style={[styles.repInfo, { backgroundColor: `${theme.success}12`, borderColor: `${theme.success}30`, marginTop: Spacing.xs }]}>
+              <Feather name="map-pin" size={14} color={theme.success} />
+              <ThemedText type="small" style={{ color: theme.success, marginLeft: Spacing.xs, flex: 1 }}>
+                A map pin will be created automatically from the address
+              </ThemedText>
+            </View>
+
             <Pressable
               onPress={handleUseCurrentLocation}
               style={[styles.locationButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.borderLight }]}
@@ -477,7 +515,7 @@ export default function LeadsScreen() {
               disabled={saving || !addressLine1.trim() || !outcome}
               style={styles.saveButton}
             >
-              {saving ? "Saving..." : "Create Lead"}
+              {geocoding ? "Finding location..." : saving ? "Saving..." : "Create Lead"}
             </Button>
           </ScrollView>
         </View>

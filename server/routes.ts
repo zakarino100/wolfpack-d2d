@@ -1070,6 +1070,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Forward geocode: address string → lat/lng + normalized address components
+  app.get("/api/geocode/forward", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { address } = req.query;
+      if (!address) {
+        return res.status(400).json({ error: "address is required" });
+      }
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Geocoding not configured" });
+      }
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address as string)}&key=${apiKey}`
+      );
+      const data = await response.json();
+      if (data.results && data.results.length > 0) {
+        const result = data.results[0];
+        const components = result.address_components || [];
+        const getComponent = (type: string) =>
+          components.find((c: { types: string[] }) => c.types.includes(type))?.long_name || "";
+        const { lat, lng } = result.geometry.location;
+        res.json({
+          address_line1: `${getComponent("street_number")} ${getComponent("route")}`.trim() || "Unknown Address",
+          city: getComponent("locality") || getComponent("sublocality"),
+          state: getComponent("administrative_area_level_1"),
+          zip: getComponent("postal_code"),
+          latitude: lat,
+          longitude: lng,
+          formatted_address: result.formatted_address,
+        });
+      } else {
+        res.status(404).json({ error: "Address not found" });
+      }
+    } catch (error) {
+      console.error("Forward geocode error:", error);
+      res.status(500).json({ error: "Geocoding failed" });
+    }
+  });
+
   app.get("/api/geocode/reverse", authMiddleware, async (req: Request, res: Response) => {
     try {
       const { lat, lng } = req.query;
