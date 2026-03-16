@@ -167,7 +167,7 @@ export async function upsertLead(payload: LeadPayload, repEmail: string) {
     phone: normalizePhone(payload.phone),
     email: normalizeEmail(payload.email),
     source: "d2d",
-    business_unit: "wolfpack_wash",
+    business_unit: "healthy_home",
   };
 
   const existingLead = await findLeadByAddressOrLatLng(
@@ -283,7 +283,7 @@ export async function logActivity(payload: ActivityPayload) {
     .from("crm_activity")
     .insert({
       ...payload,
-      business_unit: payload.business_unit || "wolfpack_wash",
+      business_unit: payload.business_unit || "healthy_home",
     })
     .select()
     .single();
@@ -298,7 +298,7 @@ export async function getLeads(repEmail: string, isAdmin: boolean) {
   let query = supabase
     .from("leads")
     .select("*")
-    .eq("business_unit", "wolfpack_wash")
+    .eq("business_unit", "healthy_home")
     .order("last_touch_at", { ascending: false });
 
   if (!isAdmin) {
@@ -391,7 +391,7 @@ export async function getServices() {
   const { data, error } = await supabase
     .from("d2d_services")
     .select("*")
-    .eq("business_unit", "wolfpack_wash")
+    .eq("business_unit", "healthy_home")
     .eq("active", true)
     .order("label");
 
@@ -404,7 +404,7 @@ export async function createPin(payload: PinPayload) {
     .from("pins")
     .insert({
       ...payload,
-      business_unit: payload.business_unit || "wolfpack_wash",
+      business_unit: payload.business_unit || "healthy_home",
     })
     .select()
     .single();
@@ -453,7 +453,7 @@ export async function getPins() {
   const { data, error } = await supabase
     .from("pins")
     .select("*")
-    .eq("business_unit", "wolfpack_wash")
+    .eq("business_unit", "healthy_home")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -464,7 +464,7 @@ export async function getPinsWithLeads() {
   const { data: pins, error: pinsError } = await supabase
     .from("pins")
     .select("*")
-    .eq("business_unit", "wolfpack_wash")
+    .eq("business_unit", "healthy_home")
     .order("created_at", { ascending: false });
 
   if (pinsError) throw pinsError;
@@ -505,7 +505,7 @@ export async function createLeadWithPin(payload: CreateLeadWithPinPayload, repEm
       created_by: repEmail,
       assigned_rep_email: repEmail,
       source: "d2d",
-      business_unit: "wolfpack_wash",
+      business_unit: "healthy_home",
       last_touch_at: new Date().toISOString(),
     };
 

@@ -82,7 +82,7 @@ async function runMigrations() {
         latitude numeric NOT NULL,
         longitude numeric NOT NULL,
         created_by text NOT NULL,
-        business_unit text DEFAULT 'wolfpack_wash',
+        business_unit text DEFAULT 'healthy_home',
         status text DEFAULT 'new'
       );
 
