@@ -5,17 +5,30 @@ type BackendLeadStatus = "new" | "quoted" | "follow_up" | "sold" | "lost";
 
 function mapStatus(status: string): BackendLeadStatus {
   const map: Record<string, BackendLeadStatus> = {
-    not_home: "new",
-    no_answer: "new",
-    not_interested: "lost",
-    do_not_knock: "lost",
-    follow_up: "follow_up",
-    booked: "follow_up",
-    contacted: "quoted",
-    interested: "quoted",
-    quoted: "quoted",
-    sold: "sold",
-    completed: "sold",
+    knocked_no_answer: "new",
+    not_home:          "new",
+    inaccessible:      "new",
+    do_not_knock:      "lost",
+    not_interested:    "lost",
+    lost:              "lost",
+    revisit_needed:    "follow_up",
+    follow_up:         "follow_up",
+    callback_set:      "follow_up",
+    quote_given:       "quoted",
+    estimate_scheduled:"quoted",
+    contacted:         "quoted",
+    interested:        "quoted",
+    quoted:            "quoted",
+    booked:            "follow_up",
+    sold:              "sold",
+    won:               "sold",
+    completed:         "sold",
+    new_lead:          "new",
+    warm_lead:         "new",
+    hot_lead:          "quoted",
+    quote_pending:     "quoted",
+    followup_due:      "follow_up",
+    no_answer:         "new",
   };
   return map[status] || "new";
 }
@@ -26,12 +39,22 @@ function parseName(fullName?: string): { firstName: string; lastName: string } {
   return { firstName: parts[0] || "Unknown", lastName: parts.slice(1).join(" ") };
 }
 
+const DOOR_ONLY_STATUSES = new Set([
+  "knocked_no_answer",
+  "not_home",
+  "inaccessible",
+]);
+
 export async function syncLeadToBackend(
   lead: Record<string, any>,
   canvasser: string,
   quoteAmount?: string
 ): Promise<number | null> {
   try {
+    if (DOOR_ONLY_STATUSES.has(lead.status)) {
+      return null;
+    }
+
     const { firstName, lastName } = parseName(lead.homeowner_name);
     const addressRaw: string = lead.address_line1 || "";
     const addressParts = addressRaw.split(",");
@@ -41,6 +64,7 @@ export async function syncLeadToBackend(
       lastName,
       source: "d2d",
       canvasser,
+      businessUnit: "Healthy Home",
       status: mapStatus(lead.status || "new"),
     };
 

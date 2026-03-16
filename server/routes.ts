@@ -526,8 +526,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "followup_channel", "followup_priority", "notes",
       ];
       const VALID_STATUSES = [
-        "not_home", "not_interested", "follow_up", "sold", "completed",
-        "no_answer", "contacted", "interested", "quoted", "booked", "do_not_knock",
+        "knocked_no_answer", "not_home", "inaccessible", "do_not_knock",
+        "not_interested", "revisit_needed", "follow_up", "callback_set",
+        "quote_given", "estimate_scheduled", "sold", "won", "lost", "completed",
+        "no_answer", "contacted", "interested", "quoted", "booked",
+        "new_lead", "warm_lead", "hot_lead", "quote_pending", "followup_due",
       ];
 
       const sanitized: Record<string, unknown> = {};
@@ -574,8 +577,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .update({ backend_lead_id: backendId })
               .eq("id", leadId);
           }
-          // If lead moved to sold and backend has it, trigger conversion
-          if (sanitized.status === "sold" && (data.backend_lead_id || backendId)) {
+          // If lead moved to sold/won and backend has it, trigger conversion
+          if ((sanitized.status === "sold" || sanitized.status === "won") && (data.backend_lead_id || backendId)) {
             await convertLeadInBackend(data.backend_lead_id || backendId!);
           }
         } catch {}
@@ -876,10 +879,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const doorsKnocked = pins?.length || 0;
       const peopleReached = leads?.length || 0;
-      const soldLeads = (leads || []).filter((l: any) => l.status === "sold" || l.status === "completed");
-      const quotedLeads = (leads || []).filter((l: any) =>
-        ["quoted", "interested", "sold", "completed"].includes(l.status)
-      );
+      const SOLD_STATUSES = ["sold", "won", "completed"];
+      const QUOTED_STATUSES = ["quote_given", "estimate_scheduled", "quoted", "interested", "sold", "won", "completed", "hot_lead"];
+      const soldLeads = (leads || []).filter((l: any) => SOLD_STATUSES.includes(l.status));
+      const quotedLeads = (leads || []).filter((l: any) => QUOTED_STATUSES.includes(l.status));
       const totalRevenue = (quotes || []).reduce(
         (sum: number, q: any) => sum + parseFloat(q.quote_amount || "0"),
         0
@@ -1036,8 +1039,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 .from("leads")
                 .update({ backend_lead_id: backendId })
                 .eq("id", result.lead!.id);
-              // If sold, trigger conversion in backend
-              if (leadStatus === "sold") {
+              // If sold/won, trigger conversion in backend
+              if (leadStatus === "sold" || leadStatus === "won") {
                 await convertLeadInBackend(backendId);
                 console.log(`[backendSync] Sold lead converted in backend id=${backendId}`);
               }
@@ -1383,10 +1386,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { data: leads, error } = await query;
       if (error) throw error;
 
+      const ANALYTICS_SOLD = ["sold", "won", "completed"];
       const allLeads = leads || [];
       const total_leads = allLeads.length;
-      const total_sold = allLeads.filter((l: any) => l.status === "sold").length;
-      const total_completed = allLeads.filter((l: any) => l.status === "completed").length;
+      const total_sold = allLeads.filter((l: any) => ANALYTICS_SOLD.includes(l.status)).length;
+      const total_completed = allLeads.filter((l: any) => l.status === "completed" || l.status === "won").length;
 
       const { count: pinsCount } = await supabase
         .from("pins")
@@ -1425,7 +1429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const email = l.created_by || "unknown";
         if (!repMap.has(email)) repMap.set(email, { doors: 0, leads: 0, sold: 0 });
         repMap.get(email)!.leads++;
-        if (l.status === "sold") repMap.get(email)!.sold++;
+        if (["sold", "won", "completed"].includes(l.status)) repMap.get(email)!.sold++;
       });
 
       const reps = Array.from(repMap.entries()).map(([email, stats]) => ({

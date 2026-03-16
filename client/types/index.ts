@@ -34,20 +34,24 @@ export interface Lead {
 }
 
 export type LeadStatus =
+  | "knocked_no_answer"
   | "not_home"
+  | "inaccessible"
+  | "do_not_knock"
   | "not_interested"
+  | "revisit_needed"
   | "follow_up"
+  | "callback_set"
+  | "quote_given"
+  | "estimate_scheduled"
   | "sold"
+  | "won"
+  | "lost"
   | "completed";
 
 export type TouchType = "knock" | "call" | "text" | "note";
 
-export type TouchOutcome =
-  | "not_home"
-  | "not_interested"
-  | "follow_up"
-  | "sold"
-  | "completed";
+export type TouchOutcome = LeadStatus;
 
 export type FollowupChannel = "call" | "text" | "knock";
 

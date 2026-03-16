@@ -89,20 +89,25 @@ export default function AdminMapScreen() {
   });
 
   const getMarkerConfig = (status: string): { color: string; icon: string } => {
-    switch (status) {
-      case "not_home":
-        return { color: LEAD_STATUSES.not_home.color, icon: "minus-circle" };
-      case "not_interested":
-        return { color: LEAD_STATUSES.not_interested.color, icon: "x-circle" };
-      case "follow_up":
-        return { color: LEAD_STATUSES.follow_up.color, icon: "clock" };
-      case "sold":
-        return { color: LEAD_STATUSES.sold.color, icon: "check-circle" };
-      case "completed":
-        return { color: LEAD_STATUSES.completed.color, icon: "check" };
-      default:
-        return { color: LEAD_STATUSES.not_home.color, icon: "map-pin" };
-    }
+    const iconMap: Record<string, string> = {
+      knocked_no_answer: "minus-circle",
+      not_home:          "minus-circle",
+      inaccessible:      "slash",
+      do_not_knock:      "x-octagon",
+      not_interested:    "x-circle",
+      revisit_needed:    "refresh-cw",
+      follow_up:         "clock",
+      callback_set:      "phone",
+      quote_given:       "file-text",
+      estimate_scheduled:"calendar",
+      sold:              "check-circle",
+      won:               "check-circle",
+      lost:              "x-circle",
+      completed:         "check",
+    };
+    const color = LEAD_STATUSES[status]?.color || LEAD_STATUSES.not_home.color;
+    const icon = iconMap[status] || "map-pin";
+    return { color, icon };
   };
 
   const CustomMarker = ({ status }: { status: string }) => {
@@ -260,7 +265,7 @@ export default function AdminMapScreen() {
       ) : null}
 
       <View style={[styles.legend, { bottom: insets.bottom + 100, backgroundColor: `${theme.backgroundRoot}E6` }, Shadows.md]}>
-        {STATUS_KEYS.map((key) => (
+        {(["not_home", "do_not_knock", "not_interested", "revisit_needed", "follow_up", "quote_given", "sold", "completed"] as const).map((key) => (
           <View key={key} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: LEAD_STATUSES[key].color }]} />
             <ThemedText type="small">{LEAD_STATUSES[key].label}</ThemedText>

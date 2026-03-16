@@ -189,13 +189,25 @@ export const Fonts = Platform.select({
   },
 });
 
-export const LEAD_STATUSES = {
-  not_home: { label: "Not Home", color: "#9CA3AF" },
-  not_interested: { label: "Not Interested", color: "#EF4444" },
-  follow_up: { label: "Follow Up", color: "#F59E0B" },
-  sold: { label: "Sold", color: "#22C55E" },
-  completed: { label: "Completed", color: "#4A9B8E" },
+export const LEAD_STATUSES: Record<string, { label: string; color: string; isLead?: boolean }> = {
+  knocked_no_answer: { label: "Knocked, No Answer", color: "#9CA3AF" },
+  not_home:          { label: "Not Home",            color: "#9CA3AF" },
+  inaccessible:      { label: "Inaccessible",        color: "#6B7280" },
+  do_not_knock:      { label: "Do Not Knock",        color: "#7F1D1D" },
+  not_interested:    { label: "Not Interested",      color: "#EF4444",  isLead: true },
+  revisit_needed:    { label: "Revisit Needed",      color: "#F97316",  isLead: true },
+  follow_up:         { label: "Follow Up",           color: "#F59E0B",  isLead: true },
+  callback_set:      { label: "Callback Set",        color: "#EAB308",  isLead: true },
+  quote_given:       { label: "Quote Given",         color: "#3B82F6",  isLead: true },
+  estimate_scheduled:{ label: "Estimate Scheduled",  color: "#8B5CF6",  isLead: true },
+  sold:              { label: "Sold",                color: "#22C55E",  isLead: true },
+  won:               { label: "Won",                 color: "#16A34A",  isLead: true },
+  lost:              { label: "Lost",                color: "#DC2626",  isLead: true },
+  completed:         { label: "Completed",           color: "#4A9B8E",  isLead: true },
 };
+
+export const DOOR_OUTCOMES = ["knocked_no_answer", "not_home", "inaccessible", "do_not_knock"] as const;
+export type DoorOutcome = typeof DOOR_OUTCOMES[number];
 
 export const SERVICES = [
   "House Wash",

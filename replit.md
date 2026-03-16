@@ -15,7 +15,9 @@ A mobile-first D2D canvassing app (formerly Wolfpack D2D) for Healthy Home field
 - **Dark**: #1B3A4B
 - **Light**: #C8DDD5
 - **Background**: #F7FAF9
-- **Lead Statuses**: not_home (gray), not_interested (red), follow_up (yellow), sold (green), completed (teal)
+- **Door Outcomes** (no lead created): knocked_no_answer (gray), not_home (gray), inaccessible (dark gray), do_not_knock (dark red)
+- **Lead Statuses** (creates/updates lead): not_interested (red), revisit_needed (orange), follow_up (yellow), callback_set (yellow), quote_given (blue), estimate_scheduled (purple), sold/won (green), lost (red), completed (teal)
+- **Backend Sync Mapping**: door outcomes → "new", not_interested/lost → "lost", follow_up/callback_set → "follow_up", quote_given/estimate_scheduled → "quoted", sold/won/completed → "sold"
 
 ## Architecture
 

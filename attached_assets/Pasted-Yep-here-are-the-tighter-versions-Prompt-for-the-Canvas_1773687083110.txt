@@ -1,0 +1,84 @@
+Yep — here are the tighter versions.
+
+Prompt for the Canvassing App agent
+You are updating the Healthy Home canvassing app to align with the Healthy Home backend.
+
+Core rules
+The backend is the canonical source of truth
+The canvassing app is the field-sales interface
+Do not invent a separate schema, status system, or KPI vocabulary from the backend
+Do not delete existing data
+Do not drop tables/collections/fields
+Do not remove records
+If changes are needed, prefer:
+additive schema changes
+safe migrations
+backward-compatible updates
+status mapping layers
+soft-deprecation instead of deletion
+Business definitions to enforce
+Not Home is not a lead
+A lead should only exist when there is:
+meaningful engagement
+interest
+quote given
+callback/follow-up needed
+estimate scheduled
+contact info captured
+real future sales potential
+The canvassing app must support and correctly capture:
+doors knocked
+contact outcomes
+good conversations
+leads created
+quotes given
+follow-ups
+route assignments
+notes
+sales outcomes
+Required contact / prospect statuses
+Use or map into this shared vocabulary:
+
+uncontacted
+knocked_no_answer
+not_home
+contacted
+not_interested
+revisit_needed
+inaccessible
+do_not_knock
+Required lead statuses
+Use or map into this shared vocabulary:
+
+new_lead
+warm_lead
+hot_lead
+quote_pending
+quote_given
+callback_set
+followup_due
+estimate_scheduled
+won
+lost
+Route requirements
+Admin-configured routes must be visible in the app
+Route changes must sync with backend
+If app-side route edits are allowed, they must publish safely back to backend
+Keep route sync auditable and backward-compatible
+Your tasks
+Review current app data structures and statuses
+Identify mismatches from the shared business definitions above
+Refactor the app to align with backend-compatible entities/statuses
+Preserve all existing data
+Add compatibility/mapping logic where old values already exist
+Make sure “not home” is tracked as activity/contact outcome, not as a lead
+Ensure app data can sync cleanly to backend for reporting
+Output:
+what needs to change
+what will stay as-is
+what mappings are needed
+any migration steps
+any risks to existing data
+Important constraint
+Do not perform destructive cleanup. Preserve existing records and make the system safer/more aligned without deleting historical data.
+

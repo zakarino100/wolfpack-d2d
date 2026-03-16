@@ -48,7 +48,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { SyncBadge } from "@/components/SyncBadge";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
-import { BorderRadius, Spacing, Shadows } from "@/constants/theme";
+import { BorderRadius, Spacing, Shadows, DOOR_OUTCOMES } from "@/constants/theme";
 import {
   TouchOutcome,
   AddressData,
@@ -66,13 +66,27 @@ const SEARCH_EXPANDED_WIDTH = SCREEN_WIDTH - 2 * Spacing.lg;
 
 type CanvassMode = "view" | "add_pin";
 
-const OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
-  { value: "not_home", label: "Not Home" },
-  { value: "not_interested", label: "Not Interested" },
-  { value: "follow_up", label: "Follow Up" },
-  { value: "sold", label: "Sold" },
-  { value: "completed", label: "Completed" },
+const DOOR_OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
+  { value: "knocked_no_answer", label: "Knocked, No Answer" },
+  { value: "not_home",          label: "Not Home" },
+  { value: "inaccessible",      label: "Inaccessible" },
+  { value: "do_not_knock",      label: "Do Not Knock" },
 ];
+
+const LEAD_OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
+  { value: "not_interested",    label: "Not Interested" },
+  { value: "revisit_needed",    label: "Revisit Needed" },
+  { value: "follow_up",         label: "Follow Up" },
+  { value: "callback_set",      label: "Callback Set" },
+  { value: "quote_given",       label: "Quote Given" },
+  { value: "estimate_scheduled",label: "Estimate Scheduled" },
+  { value: "sold",              label: "Sold" },
+  { value: "lost",              label: "Lost" },
+];
+
+function isDoorOutcome(o: TouchOutcome | null): boolean {
+  return !!o && (DOOR_OUTCOMES as readonly string[]).includes(o);
+}
 
 const DEFAULT_REGION: Region = {
   latitude: 37.7749,
@@ -524,7 +538,8 @@ export default function CanvassScreen() {
       return;
     }
 
-    if (outcome === "sold") {
+    const isSale = outcome === "sold" || outcome === "won";
+    if (isSale) {
       if (!firstName.trim()) {
         Alert.alert("Required for Sale", "Customer first name is required");
         return;
@@ -551,6 +566,7 @@ export default function CanvassScreen() {
     setSaving(true);
 
     try {
+      const doorOnly = isDoorOutcome(outcome);
       const payload = {
         pin: {
           title: address.address_line1,
@@ -563,7 +579,7 @@ export default function CanvassScreen() {
           longitude: address.longitude,
           status: outcome,
         },
-        lead: {
+        lead: doorOnly ? null : {
           address_line1: address.address_line1,
           city: address.city,
           state: address.state,
@@ -574,6 +590,7 @@ export default function CanvassScreen() {
           phone: phone || null,
           email: email || null,
           services_interested: servicesInterested.length > 0 ? servicesInterested : null,
+          status: outcome,
         },
         touch: {
           touch_type: "knock" as const,
@@ -939,9 +956,15 @@ export default function CanvassScreen() {
             </View>
 
             <FormSelect
-              label="Status *"
-              value={outcome}
-              options={OUTCOME_OPTIONS}
+              label="Door Outcome *"
+              value={isDoorOutcome(outcome) ? outcome : null}
+              options={DOOR_OUTCOME_OPTIONS}
+              onChange={setOutcome}
+            />
+            <FormSelect
+              label="Lead Stage (if engaged)"
+              value={!isDoorOutcome(outcome) ? outcome : null}
+              options={LEAD_OUTCOME_OPTIONS}
               onChange={setOutcome}
             />
 
@@ -949,7 +972,7 @@ export default function CanvassScreen() {
                 <View style={{ flexDirection: "row", gap: Spacing.sm }}>
                   <View style={{ flex: 1 }}>
                     <FormInput
-                      label={outcome === "sold" ? "First Name *" : "First Name"}
+                      label={(outcome === "sold" || outcome === "won") ? "First Name *" : "First Name"}
                       value={firstName}
                       onChangeText={setFirstName}
                       placeholder="John"
@@ -957,7 +980,7 @@ export default function CanvassScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <FormInput
-                      label={outcome === "sold" ? "Last Name *" : "Last Name"}
+                      label={(outcome === "sold" || outcome === "won") ? "Last Name *" : "Last Name"}
                       value={lastName}
                       onChangeText={setLastName}
                       placeholder="Smith"
@@ -966,7 +989,7 @@ export default function CanvassScreen() {
                 </View>
 
                 <FormInput
-                  label={outcome === "sold" ? "Phone *" : "Phone"}
+                  label={(outcome === "sold" || outcome === "won") ? "Phone *" : "Phone"}
                   value={phone}
                   onChangeText={setPhone}
                   placeholder="(555) 123-4567"
@@ -974,7 +997,7 @@ export default function CanvassScreen() {
                 />
 
                 <FormInput
-                  label={outcome === "sold" ? "Email *" : "Email"}
+                  label={(outcome === "sold" || outcome === "won") ? "Email *" : "Email"}
                   value={email}
                   onChangeText={setEmail}
                   placeholder="john@example.com"
@@ -988,7 +1011,7 @@ export default function CanvassScreen() {
                   onChange={setServicesInterested}
                 />
 
-                {outcome === "quoted" || outcome === "booked" || outcome === "sold" ? (
+                {outcome === "quote_given" || outcome === "estimate_scheduled" || outcome === "sold" || outcome === "won" ? (
                   <QuoteBuilder
                     services={services}
                     lineItems={quoteLineItems}
