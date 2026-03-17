@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -40,7 +39,6 @@ const STATUS_FILTERS: { value: LeadStatus | "all"; label: string }[] = [
 export default function AllLeadsScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
-  const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -114,7 +112,7 @@ export default function AllLeadsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={[styles.searchContainer, { marginTop: headerHeight + Spacing.md }]}>
+      <View style={[styles.searchContainer, { marginTop: Spacing.md }]}>
         <View style={[styles.searchBar, { backgroundColor: theme.backgroundDefault }, Shadows.sm]}>
           <Feather name="search" size={18} color={theme.textSecondary} />
           <TextInput

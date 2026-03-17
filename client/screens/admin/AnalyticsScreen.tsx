@@ -5,7 +5,6 @@ import {
   ScrollView,
   RefreshControl,
 } from "react-native";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -27,7 +26,6 @@ interface SummaryCardData {
 
 export default function AnalyticsScreen() {
   const { theme } = useTheme();
-  const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
 
   const {
@@ -107,7 +105,7 @@ export default function AnalyticsScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: headerHeight + Spacing.xl,
+            paddingTop: Spacing.xl,
             paddingBottom: insets.bottom + 90 + Spacing.xl,
           },
         ]}

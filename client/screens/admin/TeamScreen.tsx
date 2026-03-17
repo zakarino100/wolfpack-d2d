@@ -7,7 +7,6 @@ import {
   TextInput,
   RefreshControl,
 } from "react-native";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -52,7 +51,6 @@ function getInitial(name: string | null, email: string): string {
 
 export default function TeamScreen() {
   const { theme } = useTheme();
-  const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -146,7 +144,7 @@ export default function TeamScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={[styles.searchContainer, { marginTop: headerHeight + Spacing.md }]}>
+      <View style={[styles.searchContainer, { marginTop: Spacing.md }]}>
         <View style={[styles.searchBar, { backgroundColor: theme.backgroundDefault }, Shadows.sm]}>
           <Feather name="search" size={18} color={theme.textSecondary} />
           <TextInput

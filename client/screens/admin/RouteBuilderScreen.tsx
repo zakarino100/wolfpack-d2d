@@ -10,7 +10,6 @@ import {
   Linking,
   ActivityIndicator,
 } from "react-native";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -73,7 +72,6 @@ function getNext14Days(): Date[] {
 export default function RouteBuilderScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
 
@@ -506,7 +504,7 @@ export default function RouteBuilderScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={{ paddingTop: headerHeight + Spacing.md }}>
+      <View style={{ paddingTop: Spacing.md }}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
