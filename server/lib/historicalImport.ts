@@ -525,7 +525,6 @@ function buildLeadRecord(row: ImportRow): Record<string, unknown> {
     scheduled_date: row.scheduledDate || null,
     serviced_on: row.servicedOn || null,
     sold_date: row.soldDate || null,
-    sold_at: row.soldDate ? new Date(row.soldDate).toISOString() : null,
 
     // Source
     lead_source_original: row.leadSourceOriginal || null,
@@ -550,7 +549,6 @@ function buildLeadRecord(row: ImportRow): Record<string, unknown> {
     // Notes
     service_notes: row.serviceNotes || null,
     conversation_notes: row.conversationNotes || null,
-    notes: [row.serviceNotes, row.conversationNotes].filter(Boolean).join("\n\n") || null,
 
     // Contact
     preferred_contact: row.preferredContact || null,
