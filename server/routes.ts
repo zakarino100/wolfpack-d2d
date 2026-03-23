@@ -524,9 +524,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "homeowner_name", "phone", "email", "status",
         "services_interested", "last_touch_at", "next_followup_at",
         "followup_channel", "followup_priority", "notes",
+        "address_line1", "city", "state", "zip", "latitude", "longitude",
+        "lost_reason",
       ];
       const VALID_STATUSES = [
-        "knocked_no_answer", "not_home", "inaccessible", "do_not_knock",
+        "knocked_no_answer", "not_home", "inaccessible", "do_not_knock", "answered",
         "not_interested", "revisit_needed", "follow_up", "callback_set",
         "quote_given", "estimate_scheduled", "sold", "won", "lost", "completed",
         "no_answer", "contacted", "interested", "quoted", "booked",
@@ -966,7 +968,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/pins/:id", authMiddleware, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user as UserPayload;
-      const pin = await updatePin(req.params.id, req.body, user.email);
+      const emailForCheck = user.role === "admin" ? "__admin_bypass__" : user.email;
+      const pin = await updatePin(req.params.id, req.body, emailForCheck);
       res.json({ pin });
     } catch (error: any) {
       if (error.message?.includes("Not authorized")) {

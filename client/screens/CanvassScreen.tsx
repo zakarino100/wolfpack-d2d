@@ -67,10 +67,11 @@ const SEARCH_EXPANDED_WIDTH = SCREEN_WIDTH - 2 * Spacing.lg;
 type CanvassMode = "view" | "add_pin";
 
 const DOOR_OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
-  { value: "knocked_no_answer", label: "Knocked, No Answer" },
   { value: "not_home",          label: "Not Home" },
+  { value: "knocked_no_answer", label: "Knocked No Answer" },
   { value: "inaccessible",      label: "Inaccessible" },
   { value: "do_not_knock",      label: "Do Not Knock" },
+  { value: "answered",          label: "Answered" },
 ];
 
 const LEAD_OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
@@ -79,9 +80,18 @@ const LEAD_OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
   { value: "follow_up",         label: "Follow Up" },
   { value: "callback_set",      label: "Callback Set" },
   { value: "quote_given",       label: "Quote Given" },
-  { value: "estimate_scheduled",label: "Estimate Scheduled" },
   { value: "sold",              label: "Sold" },
   { value: "lost",              label: "Lost" },
+];
+
+const LOST_REASON_OPTIONS: { value: string; label: string }[] = [
+  { value: "price",           label: "Price" },
+  { value: "already_has_guy", label: "Already has a guy" },
+  { value: "diy",             label: "DIY" },
+  { value: "service_issue",   label: "Service issue" },
+  { value: "didnt_want_it",   label: "Didn't want it" },
+  { value: "already_had_it",  label: "Already had it done" },
+  { value: "no_idea",         label: "No idea" },
 ];
 
 function isDoorOutcome(o: TouchOutcome | null): boolean {
@@ -127,6 +137,10 @@ export default function CanvassScreen() {
   const markerPressedRef = useRef(false);
 
   const [outcome, setOutcome] = useState<TouchOutcome | null>(null);
+  const [lostReason, setLostReason] = useState<string | null>(null);
+  const [mapType, setMapType] = useState<"standard" | "satellite" | "hybrid">("standard");
+  const [answeredAt, setAnsweredAt] = useState<Date | null>(null);
+  const [editableAddress, setEditableAddress] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -376,6 +390,7 @@ export default function CanvassScreen() {
       longitude,
     };
     setAddress(finalAddress);
+    setEditableAddress(finalAddress.address_line1);
     setGeocoding(false);
 
     const existing = await checkExistingLead(finalAddress);
@@ -515,6 +530,9 @@ export default function CanvassScreen() {
 
   const resetForm = () => {
     setOutcome(null);
+    setLostReason(null);
+    setAnsweredAt(null);
+    setEditableAddress("");
     setFirstName("");
     setLastName("");
     setPhone("");
@@ -530,7 +548,7 @@ export default function CanvassScreen() {
 
   const handleSave = async () => {
     if (!outcome) {
-      Alert.alert("Missing Info", "Please select a status/outcome");
+      Alert.alert("Missing Info", "Please select a door outcome");
       return;
     }
     if (!address) {
@@ -556,49 +574,63 @@ export default function CanvassScreen() {
         Alert.alert("Required for Sale", "Customer email is required");
         return;
       }
-      if (servicesInterested.length === 0) {
-        Alert.alert("Required for Sale", "At least one service must be selected");
-        return;
-      }
     }
+
+    const autoServices = isSale && quoteLineItems.length > 0
+      ? [...new Set([...servicesInterested, ...quoteLineItems.map((li) => li.service).filter(Boolean)])]
+      : servicesInterested;
+
+    const finalAddress = {
+      ...address,
+      address_line1: editableAddress.trim() || address.address_line1,
+    };
+
+    const answeredNote = outcome === "answered" && answeredAt
+      ? `Answered at ${answeredAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. ` : "";
+    const lostNote = outcome === "lost" && lostReason
+      ? `Lost reason: ${LOST_REASON_OPTIONS.find(r => r.value === lostReason)?.label || lostReason}. ` : "";
+    const combinedNotes = `${answeredNote}${lostNote}${notes}`.trim() || null;
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
 
     try {
-      const doorOnly = isDoorOutcome(outcome);
+      const doorOnly = isDoorOutcome(outcome) && outcome !== "answered";
       const payload = {
         pin: {
-          title: address.address_line1,
-          notes: notes || null,
-          address_line1: address.address_line1,
-          city: address.city,
-          state: address.state,
-          zip: address.zip,
-          latitude: address.latitude,
-          longitude: address.longitude,
+          title: finalAddress.address_line1,
+          notes: combinedNotes,
+          address_line1: finalAddress.address_line1,
+          city: finalAddress.city,
+          state: finalAddress.state,
+          zip: finalAddress.zip,
+          latitude: finalAddress.latitude,
+          longitude: finalAddress.longitude,
           status: outcome,
         },
         lead: doorOnly ? null : {
-          address_line1: address.address_line1,
-          city: address.city,
-          state: address.state,
-          zip: address.zip,
-          latitude: address.latitude,
-          longitude: address.longitude,
+          address_line1: finalAddress.address_line1,
+          city: finalAddress.city,
+          state: finalAddress.state,
+          zip: finalAddress.zip,
+          latitude: finalAddress.latitude,
+          longitude: finalAddress.longitude,
           homeowner_name: [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") || null,
           phone: phone || null,
           email: email || null,
-          services_interested: servicesInterested.length > 0 ? servicesInterested : null,
+          services_interested: autoServices.length > 0 ? autoServices : null,
           status: outcome,
+          lost_reason: outcome === "lost" ? lostReason : null,
         },
         touch: {
           touch_type: "knock" as const,
           outcome,
-          notes: notes || null,
+          notes: combinedNotes,
           next_followup_at: followupDate?.toISOString() || null,
           followup_channel: followupChannel,
           followup_priority: followupPriority,
+          answered_at: outcome === "answered" ? (answeredAt || new Date()).toISOString() : null,
+          lost_reason: outcome === "lost" ? lostReason : null,
         },
         quote:
           quoteLineItems.length > 0
@@ -666,15 +698,36 @@ export default function CanvassScreen() {
   const getMarkerConfig = (status: string): { color: string; icon: string } => {
     switch (status) {
       case "not_home":
-        return { color: theme.statusNotHome, icon: "minus-circle" };
+        return { color: theme.statusNotHome, icon: "home" };
+      case "knocked_no_answer":
+        return { color: theme.statusKnockedNoAnswer, icon: "minus-circle" };
+      case "answered":
+        return { color: theme.statusAnswered, icon: "user-check" };
+      case "inaccessible":
+        return { color: theme.statusInaccessible, icon: "lock" };
+      case "do_not_knock":
+        return { color: theme.statusDoNotKnock, icon: "slash" };
       case "not_interested":
         return { color: theme.statusNotInterested, icon: "x-circle" };
+      case "revisit_needed":
+        return { color: theme.statusRevisitNeeded, icon: "refresh-cw" };
       case "follow_up":
         return { color: theme.statusFollowUp, icon: "clock" };
+      case "callback_set":
+        return { color: theme.statusCallbackSet, icon: "phone-call" };
+      case "quote_given":
+        return { color: theme.statusQuoteGiven, icon: "file-text" };
+      case "estimate_scheduled":
+        return { color: "#8B5CF6", icon: "calendar" };
       case "sold":
+      case "won":
         return { color: theme.statusSold, icon: "check-circle" };
+      case "lost":
+        return { color: theme.statusLost, icon: "x-circle" };
       case "completed":
         return { color: theme.statusCompleted, icon: "check" };
+      case "new":
+        return { color: theme.statusNotHome, icon: "map-pin" };
       default:
         return { color: theme.statusNotHome, icon: "map-pin" };
     }
@@ -699,7 +752,7 @@ export default function CanvassScreen() {
         onPress={handleMapPress}
         showsUserLocation
         showsMyLocationButton={false}
-        mapType="standard"
+        mapType={mapType}
         userInterfaceStyle={isDark ? "dark" : "light"}
         webMarkers={pins
           .filter((p) => p.latitude && p.longitude)
@@ -788,6 +841,12 @@ export default function CanvassScreen() {
             style={[styles.locationBtn, { backgroundColor: theme.backgroundRoot }, Shadows.md]}
           >
             <Feather name="navigation" size={20} color={theme.primary} />
+          </Pressable>
+          <Pressable
+            onPress={() => setMapType(t => t === "standard" ? "satellite" : t === "satellite" ? "hybrid" : "standard")}
+            style={[styles.locationBtn, { backgroundColor: mapType !== "standard" ? theme.primary : theme.backgroundRoot }, Shadows.md]}
+          >
+            <Feather name="layers" size={20} color={mapType !== "standard" ? "#fff" : theme.primary} />
           </Pressable>
           <SyncBadge onSync={syncPending} />
         </Animated.View>
@@ -929,11 +988,21 @@ export default function CanvassScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.addressHeader}>
-              <View style={styles.addressInfo}>
-                <ThemedText type="h3" numberOfLines={1}>
-                  {address.address_line1}
-                </ThemedText>
-                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              <View style={[styles.addressInfo, { flex: 1 }]}>
+                {geocoding ? (
+                  <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                    Finding address...
+                  </ThemedText>
+                ) : (
+                  <TextInput
+                    value={editableAddress}
+                    onChangeText={setEditableAddress}
+                    style={[styles.addressEditInput, { color: theme.text, borderColor: theme.borderLight }]}
+                    placeholder="Street address"
+                    placeholderTextColor={theme.textSecondary}
+                  />
+                )}
+                <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 2 }}>
                   {[address.city, address.state, address.zip].filter(Boolean).join(", ")}
                 </ThemedText>
               </View>
@@ -942,7 +1011,7 @@ export default function CanvassScreen() {
               ) : (
                 <View style={[styles.newBadge, { backgroundColor: `${theme.success}20` }]}>
                   <ThemedText type="small" style={{ color: theme.success, fontWeight: "600" }}>
-                    New Lead
+                    New
                   </ThemedText>
                 </View>
               )}
@@ -959,14 +1028,41 @@ export default function CanvassScreen() {
               label="Door Outcome *"
               value={isDoorOutcome(outcome) ? outcome : null}
               options={DOOR_OUTCOME_OPTIONS}
-              onChange={setOutcome}
+              onChange={(val) => {
+                setOutcome(val);
+                if (val === "answered") setAnsweredAt(new Date());
+                else setAnsweredAt(null);
+                if (val !== "lost") setLostReason(null);
+              }}
             />
+
+            {outcome === "answered" && answeredAt ? (
+              <View style={[styles.answeredRow, { backgroundColor: `${theme.statusAnswered}15` }]}>
+                <Feather name="clock" size={14} color={theme.statusAnswered} />
+                <ThemedText type="small" style={{ color: theme.statusAnswered, marginLeft: Spacing.xs }}>
+                  Time recorded: {answeredAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </ThemedText>
+              </View>
+            ) : null}
+
             <FormSelect
-              label="Lead Stage (if engaged)"
+              label="Lead Stage (select if engaged)"
               value={!isDoorOutcome(outcome) ? outcome : null}
               options={LEAD_OUTCOME_OPTIONS}
-              onChange={setOutcome}
+              onChange={(val) => {
+                setOutcome(val);
+                if (val !== "lost") setLostReason(null);
+              }}
             />
+
+            {outcome === "lost" ? (
+              <FormSelect
+                label="Lost Reason"
+                value={lostReason}
+                options={LOST_REASON_OPTIONS}
+                onChange={setLostReason}
+              />
+            ) : null}
 
             <>
                 <View style={{ flexDirection: "row", gap: Spacing.sm }}>
@@ -1011,11 +1107,17 @@ export default function CanvassScreen() {
                   onChange={setServicesInterested}
                 />
 
-                {outcome === "quote_given" || outcome === "estimate_scheduled" || outcome === "sold" || outcome === "won" ? (
+                {outcome === "quote_given" || outcome === "sold" || outcome === "won" ? (
                   <QuoteBuilder
                     services={services}
                     lineItems={quoteLineItems}
-                    onChange={setQuoteLineItems}
+                    onChange={(items) => {
+                      setQuoteLineItems(items);
+                      if (outcome === "sold" || outcome === "won") {
+                        const fromQuote = items.map(li => li.service).filter(Boolean);
+                        setServicesInterested(prev => [...new Set([...prev, ...fromQuote])]);
+                      }
+                    }}
                   />
                 ) : null}
 
@@ -1181,6 +1283,23 @@ const styles = StyleSheet.create({
   addressInfo: {
     flex: 1,
     marginRight: Spacing.md,
+  },
+  addressEditInput: {
+    fontSize: 16,
+    fontWeight: "600",
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    marginBottom: 2,
+  },
+  answeredRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.sm,
   },
   newBadge: {
     paddingHorizontal: Spacing.sm,

@@ -35,6 +35,8 @@ export default function AnalyticsScreen() {
     isRefetching: isRefetchingSummary,
   } = useQuery<{ summary: AnalyticsSummary }>({
     queryKey: ["/api/analytics/summary"],
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   const {
@@ -44,6 +46,8 @@ export default function AnalyticsScreen() {
     isRefetching: isRefetchingReps,
   } = useQuery<{ reps: RepAnalytics[] }>({
     queryKey: ["/api/analytics/reps"],
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   const isLoading = summaryLoading || repsLoading;

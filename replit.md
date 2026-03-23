@@ -35,7 +35,7 @@ A mobile-first D2D canvassing app (formerly Wolfpack D2D) for Healthy Home field
   - `LeadDetailScreen.tsx` - Full lead details with inline touch modal + edit mode
   - `LoginScreen.tsx` - Google OAuth login
   - `admin/AdminMapScreen.tsx` - Live map of all pins + rep locations
-  - `admin/RouteBuilderScreen.tsx` - Create/manage routes with stops
+  - `admin/RouteBuilderScreen.tsx` - Two-tab screen: Routes (create/manage routes with stops) and Jobs (schedule HH backend jobs to technicians with hour-by-hour time slots, 4-job-per-tech-per-day cap)
   - `admin/AllLeadsScreen.tsx` - All leads across reps with search/filter
   - `admin/AnalyticsScreen.tsx` - Summary cards + per-rep breakdown
   - `admin/TeamScreen.tsx` - Team member list with stats

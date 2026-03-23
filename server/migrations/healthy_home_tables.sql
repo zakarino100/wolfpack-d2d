@@ -9,8 +9,14 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS sold_at timestamptz;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS contact_name text;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS contact_phone text;
 
+-- Lost reason and status tracking
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS lost_reason text;
+
 -- Backend sync tracking: stores the ID from the Healthy Home backend CRM
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS backend_lead_id integer;
+
+-- Answered-at timestamp on touches (for "Answered" door outcome timing)
+ALTER TABLE d2d_touches ADD COLUMN IF NOT EXISTS answered_at timestamptz;
 
 -- Routes table
 CREATE TABLE IF NOT EXISTS routes (

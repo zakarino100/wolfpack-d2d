@@ -45,11 +45,29 @@ import { RootStackParamList } from "@/navigation/RootStackNavigator";
 type RouteProps = RouteProp<RootStackParamList, "LeadDetail">;
 
 const OUTCOME_OPTIONS: { value: TouchOutcome; label: string }[] = [
-  { value: "not_home", label: "Not Home" },
+  { value: "not_home",       label: "Not Home" },
+  { value: "knocked_no_answer", label: "Knocked No Answer" },
+  { value: "answered",       label: "Answered" },
+  { value: "inaccessible",   label: "Inaccessible" },
+  { value: "do_not_knock",   label: "Do Not Knock" },
   { value: "not_interested", label: "Not Interested" },
-  { value: "follow_up", label: "Follow Up" },
-  { value: "sold", label: "Sold" },
-  { value: "completed", label: "Completed" },
+  { value: "revisit_needed", label: "Revisit Needed" },
+  { value: "follow_up",      label: "Follow Up" },
+  { value: "callback_set",   label: "Callback Set" },
+  { value: "quote_given",    label: "Quote Given" },
+  { value: "sold",           label: "Sold" },
+  { value: "lost",           label: "Lost" },
+  { value: "completed",      label: "Completed" },
+];
+
+const LOST_REASON_OPTIONS: { value: string; label: string }[] = [
+  { value: "price",           label: "Price" },
+  { value: "already_has_guy", label: "Already has a guy" },
+  { value: "diy",             label: "DIY" },
+  { value: "service_issue",   label: "Service issue" },
+  { value: "didnt_want_it",   label: "Didn't want it" },
+  { value: "already_had_it",  label: "Already had it done" },
+  { value: "no_idea",         label: "No idea" },
 ];
 
 export default function LeadDetailScreen() {
@@ -69,6 +87,12 @@ export default function LeadDetailScreen() {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [editState, setEditState] = useState("");
+  const [editZip, setEditZip] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editLostReason, setEditLostReason] = useState<string | null>(null);
   const [editServices, setEditServices] = useState<string[]>([]);
   const [editStatus, setEditStatus] = useState<TouchOutcome | null>(null);
   const [saving, setSaving] = useState(false);
@@ -117,6 +141,12 @@ export default function LeadDetailScreen() {
       setEditName(lead.homeowner_name || "");
       setEditPhone(lead.phone || "");
       setEditEmail(lead.email || "");
+      setEditAddress(lead.address_line1 || "");
+      setEditCity(lead.city || "");
+      setEditState(lead.state || "");
+      setEditZip(lead.zip || "");
+      setEditNotes((lead as any).notes || "");
+      setEditLostReason((lead as any).lost_reason || null);
       setEditServices(lead.services_interested || []);
       setEditStatus(lead.status as TouchOutcome || null);
     }
@@ -219,14 +249,59 @@ export default function LeadDetailScreen() {
     if (!lead) return;
     setSaving(true);
     try {
+      const addressChanged = editAddress.trim() !== (lead.address_line1 || "");
+      let lat = lead.latitude;
+      let lng = lead.longitude;
+
+      if (addressChanged && editAddress.trim()) {
+        try {
+          const geoResp = await apiRequest("GET", `/api/geocode/forward?address=${encodeURIComponent(`${editAddress}, ${editCity}, ${editState} ${editZip}`)}`);
+          if (geoResp.ok) {
+            const geoData = await geoResp.json();
+            if (geoData.latitude && geoData.longitude) {
+              lat = geoData.latitude;
+              lng = geoData.longitude;
+            }
+          }
+        } catch {
+          // geocode failed, keep existing coords
+        }
+      }
+
       await apiRequest("PUT", `/api/leads/${leadId}`, {
         homeowner_name: editName || null,
         phone: editPhone || null,
         email: editEmail || null,
+        address_line1: editAddress || lead.address_line1,
+        city: editCity || lead.city,
+        state: editState || lead.state,
+        zip: editZip || lead.zip,
+        latitude: lat,
+        longitude: lng,
+        notes: editNotes || null,
+        lost_reason: editStatus === "lost" ? editLostReason : null,
         services_interested: editServices.length > 0 ? editServices : null,
         status: editStatus || lead.status,
       });
+
+      if (addressChanged && lead.pin_id && lat && lng) {
+        try {
+          await apiRequest("PUT", `/api/pins/${lead.pin_id}`, {
+            address_line1: editAddress,
+            city: editCity,
+            state: editState,
+            zip: editZip,
+            latitude: lat,
+            longitude: lng,
+            title: editAddress,
+          });
+        } catch {
+          // pin update failed silently
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ["/api/leads", leadId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pins"] });
       setIsEditing(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -407,8 +482,19 @@ export default function LeadDetailScreen() {
                 label="Status"
                 value={editStatus}
                 options={OUTCOME_OPTIONS}
-                onChange={setEditStatus}
+                onChange={(val) => {
+                  setEditStatus(val);
+                  if (val !== "lost") setEditLostReason(null);
+                }}
               />
+              {editStatus === "lost" ? (
+                <FormSelect
+                  label="Lost Reason"
+                  value={editLostReason}
+                  options={LOST_REASON_OPTIONS}
+                  onChange={setEditLostReason}
+                />
+              ) : null}
               <FormInput
                 label="Homeowner Name"
                 value={editName}
@@ -429,6 +515,52 @@ export default function LeadDetailScreen() {
                 placeholder="john@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
+              />
+              <FormInput
+                label="Street Address"
+                value={editAddress}
+                onChangeText={setEditAddress}
+                placeholder="123 Main St"
+                autoCapitalize="words"
+              />
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <View style={{ flex: 2 }}>
+                  <FormInput
+                    label="City"
+                    value={editCity}
+                    onChangeText={setEditCity}
+                    placeholder="Springfield"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <FormInput
+                    label="State"
+                    value={editState}
+                    onChangeText={setEditState}
+                    placeholder="IL"
+                    autoCapitalize="characters"
+                    maxLength={2}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <FormInput
+                    label="Zip"
+                    value={editZip}
+                    onChangeText={setEditZip}
+                    placeholder="62701"
+                    keyboardType="numeric"
+                    maxLength={5}
+                  />
+                </View>
+              </View>
+              <FormInput
+                label="Notes"
+                value={editNotes}
+                onChangeText={setEditNotes}
+                placeholder="Notes about this lead..."
+                multiline
+                numberOfLines={3}
+                style={{ height: 80, textAlignVertical: "top", paddingTop: 8 }}
               />
               <ServiceCheckbox
                 services={services}
@@ -451,6 +583,12 @@ export default function LeadDetailScreen() {
                       setEditName(lead.homeowner_name || "");
                       setEditPhone(lead.phone || "");
                       setEditEmail(lead.email || "");
+                      setEditAddress(lead.address_line1 || "");
+                      setEditCity(lead.city || "");
+                      setEditState(lead.state || "");
+                      setEditZip(lead.zip || "");
+                      setEditNotes((lead as any).notes || "");
+                      setEditLostReason((lead as any).lost_reason || null);
                       setEditServices(lead.services_interested || []);
                       setEditStatus(lead.status as TouchOutcome || null);
                     }

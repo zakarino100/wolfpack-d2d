@@ -24,9 +24,18 @@ export const Colors = {
     error: "#EF4444",
     info: "#007AFF",
     statusNotHome: "#9CA3AF",
+    statusKnockedNoAnswer: "#9CA3AF",
+    statusAnswered: "#60A5FA",
+    statusInaccessible: "#6B7280",
+    statusDoNotKnock: "#7F1D1D",
     statusNotInterested: "#EF4444",
+    statusRevisitNeeded: "#F97316",
     statusFollowUp: "#F59E0B",
+    statusCallbackSet: "#EAB308",
+    statusQuoteGiven: "#3B82F6",
     statusSold: "#22C55E",
+    statusWon: "#16A34A",
+    statusLost: "#DC2626",
     statusCompleted: "#4A9B8E",
   },
   dark: {
@@ -49,9 +58,18 @@ export const Colors = {
     error: "#FF453A",
     info: "#0A84FF",
     statusNotHome: "#8E8E93",
+    statusKnockedNoAnswer: "#8E8E93",
+    statusAnswered: "#5B8AFA",
+    statusInaccessible: "#6B7280",
+    statusDoNotKnock: "#991B1B",
     statusNotInterested: "#FF453A",
+    statusRevisitNeeded: "#FB923C",
     statusFollowUp: "#FFD60A",
+    statusCallbackSet: "#FBBF24",
+    statusQuoteGiven: "#60A5FA",
     statusSold: "#30D158",
+    statusWon: "#34D399",
+    statusLost: "#FF453A",
     statusCompleted: "#5BB8A9",
   },
 };
@@ -190,24 +208,35 @@ export const Fonts = Platform.select({
 });
 
 export const LEAD_STATUSES: Record<string, { label: string; color: string; isLead?: boolean }> = {
-  knocked_no_answer: { label: "Knocked, No Answer", color: "#9CA3AF" },
-  not_home:          { label: "Not Home",            color: "#9CA3AF" },
-  inaccessible:      { label: "Inaccessible",        color: "#6B7280" },
-  do_not_knock:      { label: "Do Not Knock",        color: "#7F1D1D" },
-  not_interested:    { label: "Not Interested",      color: "#EF4444",  isLead: true },
-  revisit_needed:    { label: "Revisit Needed",      color: "#F97316",  isLead: true },
-  follow_up:         { label: "Follow Up",           color: "#F59E0B",  isLead: true },
-  callback_set:      { label: "Callback Set",        color: "#EAB308",  isLead: true },
-  quote_given:       { label: "Quote Given",         color: "#3B82F6",  isLead: true },
-  estimate_scheduled:{ label: "Estimate Scheduled",  color: "#8B5CF6",  isLead: true },
-  sold:              { label: "Sold",                color: "#22C55E",  isLead: true },
-  won:               { label: "Won",                 color: "#16A34A",  isLead: true },
-  lost:              { label: "Lost",                color: "#DC2626",  isLead: true },
-  completed:         { label: "Completed",           color: "#4A9B8E",  isLead: true },
+  knocked_no_answer: { label: "Knocked No Answer", color: "#9CA3AF" },
+  not_home:          { label: "Not Home",           color: "#9CA3AF" },
+  inaccessible:      { label: "Inaccessible",       color: "#6B7280" },
+  do_not_knock:      { label: "Do Not Knock",       color: "#7F1D1D" },
+  answered:          { label: "Answered",            color: "#60A5FA" },
+  not_interested:    { label: "Not Interested",     color: "#EF4444",  isLead: true },
+  revisit_needed:    { label: "Revisit Needed",     color: "#F97316",  isLead: true },
+  follow_up:         { label: "Follow Up",          color: "#F59E0B",  isLead: true },
+  callback_set:      { label: "Callback Set",       color: "#EAB308",  isLead: true },
+  quote_given:       { label: "Quote Given",        color: "#3B82F6",  isLead: true },
+  estimate_scheduled:{ label: "Estimate Scheduled", color: "#8B5CF6",  isLead: true },
+  sold:              { label: "Sold",               color: "#22C55E",  isLead: true },
+  won:               { label: "Won",                color: "#16A34A",  isLead: true },
+  lost:              { label: "Lost",               color: "#DC2626",  isLead: true },
+  completed:         { label: "Completed",          color: "#4A9B8E",  isLead: true },
 };
 
-export const DOOR_OUTCOMES = ["knocked_no_answer", "not_home", "inaccessible", "do_not_knock"] as const;
+export const DOOR_OUTCOMES = ["knocked_no_answer", "not_home", "inaccessible", "do_not_knock", "answered"] as const;
 export type DoorOutcome = typeof DOOR_OUTCOMES[number];
+
+export const LOST_REASONS = [
+  { value: "price",           label: "Price" },
+  { value: "already_has_guy", label: "Already has a guy" },
+  { value: "diy",             label: "DIY" },
+  { value: "service_issue",   label: "Service issue" },
+  { value: "didnt_want_it",   label: "Didn't want it" },
+  { value: "already_had_it",  label: "Already had it done" },
+  { value: "no_idea",         label: "No idea" },
+] as const;
 
 export const SERVICES = [
   "House Wash",
