@@ -11,7 +11,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { useMutation } from "@tanstack/react-query";
-import { getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -46,19 +46,8 @@ export default function ImportScreen() {
 
   const runMutation = useMutation({
     mutationFn: async (dryRun: boolean) => {
-      const url = new URL(
-        dryRun ? "/api/admin/import/dry-run" : "/api/admin/import/run",
-        getApiUrl()
-      ).toString();
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `HTTP ${res.status}`);
-      }
+      const route = dryRun ? "/api/admin/import/dry-run" : "/api/admin/import/run";
+      const res = await apiRequest("POST", route, {});
       return res.json() as Promise<{ report: ImportReport; logs: string[] }>;
     },
     onSuccess: (data, dryRun) => {
