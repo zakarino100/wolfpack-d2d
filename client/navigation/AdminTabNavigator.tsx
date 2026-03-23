@@ -9,6 +9,7 @@ import RouteBuilderScreen from "@/screens/admin/RouteBuilderScreen";
 import AllLeadsScreen from "@/screens/admin/AllLeadsScreen";
 import AnalyticsScreen from "@/screens/admin/AnalyticsScreen";
 import TeamScreen from "@/screens/admin/TeamScreen";
+import ImportScreen from "@/screens/admin/ImportScreen";
 import CanvassScreen from "@/screens/CanvassScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useTheme } from "@/hooks/useTheme";
@@ -20,6 +21,7 @@ export type AdminTabParamList = {
   AllLeadsTab: undefined;
   AnalyticsTab: undefined;
   TeamTab: undefined;
+  ImportTab: undefined;
 };
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -120,6 +122,17 @@ export default function AdminTabNavigator() {
           headerTitle: () => <HeaderTitle title="Team" />,
           tabBarIcon: ({ color, size }) => (
             <Feather name="briefcase" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="ImportTab"
+        component={ImportScreen}
+        options={{
+          title: "Import",
+          headerTitle: () => <HeaderTitle title="WPW Import" />,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="upload-cloud" size={size} color={color} />
           ),
         }}
       />

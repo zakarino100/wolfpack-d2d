@@ -57,6 +57,7 @@ export default function AdminMapScreen() {
   const [showFilter, setShowFilter] = useState(false);
   const [activeStatuses, setActiveStatuses] = useState<LeadStatus[]>([...STATUS_KEYS]);
   const [showOnlyUnscheduled, setShowOnlyUnscheduled] = useState(false);
+  const [layerFilter, setLayerFilter] = useState<"all" | "current" | "historical">("all");
   const markerPressedRef = useRef(false);
 
   const { data: pinsData } = useQuery<{ pins: Pin[] }>({
@@ -79,12 +80,17 @@ export default function AdminMapScreen() {
   const unscheduledLeadIds = new Set((unscheduledData?.leads || []).map((l) => l.id));
   const unscheduledCount = unscheduledData?.leads?.length || 0;
 
+  const HISTORICAL_CRIMSON = "#C0121A";
+
   const filteredPins = pins.filter((pin) => {
     const status = (pin.status || pin.lead?.status || "not_home") as LeadStatus;
     if (!activeStatuses.includes(status)) return false;
     if (showOnlyUnscheduled) {
       return pin.lead?.id ? unscheduledLeadIds.has(pin.lead.id) : false;
     }
+    const isHistorical = !!(pin.lead as any)?.is_historical_import;
+    if (layerFilter === "current" && isHistorical) return false;
+    if (layerFilter === "historical" && !isHistorical) return false;
     return true;
   });
 
@@ -110,11 +116,13 @@ export default function AdminMapScreen() {
     return { color, icon };
   };
 
-  const CustomMarker = ({ status }: { status: string }) => {
+  const CustomMarker = ({ status, isHistorical }: { status: string; isHistorical?: boolean }) => {
     const config = getMarkerConfig(status);
+    const bgColor = isHistorical ? HISTORICAL_CRIMSON : config.color;
+    const icon = isHistorical ? "archive" : (config.icon as any);
     return (
-      <View style={[markerStyles.container, { backgroundColor: config.color }]}>
-        <Feather name={config.icon as any} size={14} color="#FFFFFF" />
+      <View style={[markerStyles.container, { backgroundColor: bgColor }]}>
+        <Feather name={icon} size={14} color="#FFFFFF" />
       </View>
     );
   };
@@ -192,7 +200,10 @@ export default function AdminMapScreen() {
               onPress={() => handleMarkerPress(pin)}
               tracksViewChanges={false}
             >
-              <CustomMarker status={pin.status || pin.lead?.status || "not_home"} />
+              <CustomMarker
+                status={pin.status || pin.lead?.status || "not_home"}
+                isHistorical={!!(pin.lead as any)?.is_historical_import}
+              />
             </MapMarker>
           ) : null
         )}
@@ -216,12 +227,12 @@ export default function AdminMapScreen() {
             styles.iconBtn,
             { backgroundColor: theme.backgroundRoot },
             Shadows.md,
-            (showOnlyUnscheduled || activeStatuses.length < STATUS_KEYS.length)
+            (showOnlyUnscheduled || activeStatuses.length < STATUS_KEYS.length || layerFilter !== "all")
               ? { borderWidth: 2, borderColor: theme.primary }
               : null,
           ]}
         >
-          <Feather name="filter" size={20} color={showOnlyUnscheduled ? theme.primary : theme.text} />
+          <Feather name="filter" size={20} color={(showOnlyUnscheduled || layerFilter !== "all") ? theme.primary : theme.text} />
         </Pressable>
 
         <Pressable
@@ -272,6 +283,10 @@ export default function AdminMapScreen() {
           </View>
         ))}
         <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: HISTORICAL_CRIMSON }]} />
+          <ThemedText type="small">Historical WPW</ThemedText>
+        </View>
+        <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: theme.primary, borderRadius: 6 }]} />
           <ThemedText type="small">Rep</ThemedText>
         </View>
@@ -320,6 +335,34 @@ export default function AdminMapScreen() {
                 <Feather name="briefcase" size={14} color={theme.textSecondary} />
                 <ThemedText type="small" style={{ marginLeft: Spacing.xs, color: theme.textSecondary }}>
                   {selectedPin.lead.assigned_rep_email}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {/* Historical import badge */}
+            {(selectedPin.lead as any)?.is_historical_import ? (
+              <View style={[styles.pinCardRow, { backgroundColor: `${HISTORICAL_CRIMSON}15`, borderRadius: 6, paddingHorizontal: Spacing.sm, paddingVertical: 4, marginTop: Spacing.xs }]}>
+                <Feather name="archive" size={12} color={HISTORICAL_CRIMSON} />
+                <ThemedText type="small" style={{ marginLeft: Spacing.xs, color: HISTORICAL_CRIMSON, fontWeight: "700" }}>
+                  Historical Wolf Pack Wash — {(selectedPin.lead as any)?.lead_year ?? 2025}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {(selectedPin.lead as any)?.total_quote ? (
+              <View style={styles.pinCardRow}>
+                <Feather name="dollar-sign" size={14} color={theme.textSecondary} />
+                <ThemedText type="small" style={{ marginLeft: Spacing.xs, color: theme.textSecondary }}>
+                  ${Number((selectedPin.lead as any).total_quote).toFixed(2)}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {(selectedPin.lead as any)?.lead_source_original ? (
+              <View style={styles.pinCardRow}>
+                <Feather name="tag" size={14} color={theme.textSecondary} />
+                <ThemedText type="small" style={{ marginLeft: Spacing.xs, color: theme.textSecondary }}>
+                  Source: {(selectedPin.lead as any).lead_source_original}
                 </ThemedText>
               </View>
             ) : null}
@@ -404,7 +447,40 @@ export default function AdminMapScreen() {
               </View>
             </Pressable>
 
-            <ThemedText type="body" style={{ marginBottom: Spacing.md, marginTop: Spacing.lg }}>
+            {/* Layer Filter */}
+            <ThemedText type="body" style={{ marginBottom: Spacing.sm, marginTop: Spacing.lg }}>
+              Data Layer
+            </ThemedText>
+            <View style={[styles.chipContainer, { marginBottom: Spacing.md }]}>
+              {(["all", "current", "historical"] as const).map((layer) => {
+                const labels = { all: "All Leads", current: "Current Only", historical: "Historical WPW" };
+                const colors = { all: theme.primary, current: theme.success, historical: HISTORICAL_CRIMSON };
+                const isActive = layerFilter === layer;
+                return (
+                  <Pressable
+                    key={layer}
+                    testID={`chip-layer-${layer}`}
+                    onPress={() => setLayerFilter(layer)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: isActive ? `${colors[layer]}20` : theme.backgroundSecondary,
+                        borderColor: isActive ? colors[layer] : theme.border,
+                      },
+                    ]}
+                  >
+                    <ThemedText
+                      type="small"
+                      style={{ color: isActive ? colors[layer] : theme.textSecondary, fontWeight: isActive ? "700" : "400" }}
+                    >
+                      {labels[layer]}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <ThemedText type="body" style={{ marginBottom: Spacing.md, marginTop: Spacing.sm }}>
               Status
             </ThemedText>
             <View style={styles.chipContainer}>

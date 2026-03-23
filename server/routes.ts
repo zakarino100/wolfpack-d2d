@@ -1598,6 +1598,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Historical Import Endpoints ──────────────────────────────────────────────
+
+  // POST /api/admin/import/dry-run — parse, geocode, deduplicate; no writes
+  app.post("/api/admin/import/dry-run", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { runHistoricalImport } = await import("./lib/historicalImport");
+      const logs: string[] = [];
+      const report = await runHistoricalImport(true, (msg: string) => {
+        logs.push(msg);
+        console.log("[import-dry-run]", msg);
+      });
+      res.json({ report, logs });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Import failed" });
+    }
+  });
+
+  // POST /api/admin/import/run — real import
+  app.post("/api/admin/import/run", authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { runHistoricalImport } = await import("./lib/historicalImport");
+      const logs: string[] = [];
+      const report = await runHistoricalImport(false, (msg: string) => {
+        logs.push(msg);
+        console.log("[import-run]", msg);
+      });
+      res.json({ report, logs });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Import failed" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

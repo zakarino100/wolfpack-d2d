@@ -31,6 +31,23 @@ export interface Lead {
   contact_name: string | null;
   contact_phone: string | null;
   notes: string | null;
+  // Historical import fields
+  is_historical_import?: boolean;
+  import_batch?: string | null;
+  branch?: string | null;
+  lead_year?: number | null;
+  full_address?: string | null;
+  house_sqft?: number | null;
+  cement_sqft?: number | null;
+  total_quote?: number | null;
+  frequency?: string | null;
+  lead_source_original?: string | null;
+  airtable_quote_id?: string | null;
+  assigned_rep?: string | null;
+  service_notes?: string | null;
+  conversation_notes?: string | null;
+  is_purchased?: boolean;
+  is_serviced?: boolean;
 }
 
 export type LeadStatus =

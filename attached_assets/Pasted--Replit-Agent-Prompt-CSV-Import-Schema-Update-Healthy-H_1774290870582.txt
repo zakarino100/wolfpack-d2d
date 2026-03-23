@@ -1,0 +1,462 @@
+# Replit Agent Prompt: CSV Import + Schema Update
+
+## Healthy Home Door-to-Door App — Wolf Pack Wash Historical Leads
+
+I need you to update the Healthy Home door-to-door app to import historical lead/quote data from an Airtable CSV export into Supabase. This is a non-destructive additive import. Do not touch, overwrite, or delete any existing leads or map pins already in the system.
+
+This task must be done carefully in stages. Favor additive, reversible changes over broad refactors.
+
+--------------------------------------------------
+## CONTEXT
+--------------------------------------------------
+
+The CSV is a full export of our Airtable “Quotes” table covering Feb 2025 through Aug 2025. These are real customer leads and jobs collected door-to-door and via inbound.
+
+We want all valid non-duplicate records imported into Supabase so they show as map pins in the admin map view, clearly labeled as historical Wolf Pack Wash imports so they are visually distinguishable from current-year leads added through the app.
+
+This import must be safe, idempotent, and must not disrupt existing current-year lead records or current map pin behavior.
+
+--------------------------------------------------
+## HIGH-LEVEL GOAL
+--------------------------------------------------
+
+Import historical Wolf Pack Wash leads from CSV into the same canonical data system already used by:
+- the admin lead list
+- the admin map view
+- the quote builder records
+
+Do not create a disconnected parallel leads system unless the current architecture absolutely requires it.
+
+Historical imported leads must:
+- appear on the map
+- be visually distinguishable from current leads
+- be clearly tagged in admin
+- preserve source attribution
+- not interfere with current lead workflows
+- support future admin editing of exact square footage
+
+--------------------------------------------------
+## STAGE 0: INSPECT BEFORE CHANGING ANYTHING
+--------------------------------------------------
+
+Before making any changes, inspect and report:
+
+1. The current Prisma schema and the actual canonical table/model used for leads/quotes
+2. Which table powers the admin lead list
+3. Which table powers the admin map pins
+4. Which fields are currently used by the quote builder
+5. Whether latitude/longitude are already stored or derived at runtime
+6. The exact CSV headers present in the uploaded file
+7. Any differences between the actual CSV headers and the mapping spec below
+
+Do not run any migration or import until this inspection is complete and reported back.
+
+--------------------------------------------------
+## DRY RUN REQUIRED BEFORE REAL IMPORT
+--------------------------------------------------
+
+Before any real database writes, implement and run a DRY RUN mode for the importer that:
+
+- parses the full CSV
+- shows the exact CSV-to-DB field mappings used
+- reports how many rows would be inserted
+- reports how many rows would be skipped as duplicates
+- reports rows with missing address
+- reports rows with parse/normalization issues
+- reports rows with geocoding failures that would likely occur
+- performs zero writes to Supabase
+
+Do not run the real import until the dry-run summary is complete.
+
+--------------------------------------------------
+## EXACT CSV COLUMN MAPPING
+--------------------------------------------------
+
+Map the CSV columns to database fields as follows:
+
+| CSV Column                 | DB Field               | Notes |
+|---------------------------|------------------------|-------|
+| First Name                | first_name             | Trim whitespace |
+| Last Name                 | last_name              | Trim whitespace, may be empty |
+| Purchased                 | is_purchased           | "checked" = true, empty = false |
+| Serviced                  | is_serviced            | "checked" = true, empty = false |
+| Created Time              | created_at_airtable    | Parse as datetime, store as-is |
+| Scheduled                 | scheduled_date         | Date string, may be empty |
+| Assigned Employee         | assigned_rep           | String, may be empty |
+| ServicedOn                | serviced_on            | Date string, may be empty |
+| Street Address            | full_address           | Raw address string; also attempt geocode |
+| City                      | city                   | May be empty; extract from full_address if possible |
+| Zip Code                  | zip_code               | May be empty |
+| Phone Number              | phone_raw              | Store raw; also normalize to E.164 in phone_normalized |
+| Email Address             | email                  | Lowercase, trim |
+| Services Selected         | services               | Store as text array; parse comma-delimited CSV content |
+| Streakless Windows (Y/N)  | streakless_windows     | "checked" = true |
+| Service Notes             | service_notes          | Preserve full text and line breaks |
+| House Sqft                | house_sqft             | Integer, may be empty |
+| Cement Sqft               | cement_sqft            | Integer, may be empty |
+| Windows Count             | windows_count          | Integer, may be empty |
+| Linear Ft                 | linear_ft              | Integer, may be empty |
+| Frequency                 | frequency              | String such as "One time service" or "Once a Year" |
+| Total Quote               | total_quote            | Decimal; strip $ sign before parsing |
+| Came from                 | lead_source_original   | Raw original source value such as D2D, Google, Instagram |
+| Consent to sms            | sms_consent            | "checked" = true |
+| Sold Date                 | sold_date              | Date string |
+| PreferredContact          | preferred_contact      | Text |
+| Conversation Notes        | conversation_notes     | Full text |
+| Quote ID                  | airtable_quote_id      | Store as reference, do not use as primary key |
+
+--------------------------------------------------
+## COLUMNS TO SKIP
+--------------------------------------------------
+
+Do not import these fields:
+
+- Generate Quote
+- Generate quote URL
+- Link to Estimate
+- Retrieve Deposit Link
+- Mark as Sold Button
+- Send SMS Button
+- SMS Quote Sent
+- Address Last Modified Time
+- Last modified time
+- Pollen Season Email Sent
+- Scheduling Email Sent
+- After Pollen
+- Lead
+- Message Received
+- Thread ID
+- Home Sold Price
+- Waste Receptacles
+- Unit
+- Duration (minutes)
+- Quote Images
+
+--------------------------------------------------
+## REQUIRED HARD-CODED TAGS FOR EVERY IMPORTED ROW
+--------------------------------------------------
+
+Every imported row must have these values set:
+
+source = "Wolf Pack Wash leads historical import"
+branch = "Wolf Pack Wash"
+is_historical_import = true
+import_batch = "airtable-wpw-2025"
+lead_year = 2025
+imported_from_csv = true
+
+These values must be applied consistently to every successfully imported row.
+
+Historical pin styling must rely on is_historical_import = true, not on string matching against source or branch.
+
+--------------------------------------------------
+## CANONICAL TABLE REQUIREMENT
+--------------------------------------------------
+
+Determine which existing table is the canonical table used by:
+- admin lead list
+- admin map view
+- quote builder lead records
+
+Import historical CSV rows into that canonical table unless the current architecture clearly requires a separate linked table.
+
+Do not create a disconnected parallel table that the map/admin UI does not actually read from.
+
+--------------------------------------------------
+## SCHEMA CHANGES NEEDED
+--------------------------------------------------
+
+If the following fields do not already exist in the canonical leads/quotes table, add them in an additive migration and update schema.prisma accordingly:
+
+Historical import tracking:
+- is_historical_import BOOLEAN DEFAULT false
+- import_batch TEXT
+- imported_from_csv BOOLEAN DEFAULT false
+- lead_year INTEGER
+- source TEXT
+- branch TEXT
+
+Address / geocoding:
+- city TEXT
+- zip_code TEXT
+- full_address TEXT
+- latitude FLOAT
+- longitude FLOAT
+
+Square footage:
+- house_sqft INTEGER
+- cement_sqft INTEGER
+- exact_square_footage INTEGER NULL
+
+Additional import fields:
+- phone_raw TEXT
+- phone_normalized TEXT
+- airtable_quote_id TEXT
+- created_at_airtable TIMESTAMPTZ
+- assigned_rep TEXT
+- serviced_on DATE
+- scheduled_date DATE
+- sold_date DATE
+- lead_source_original TEXT
+- services TEXT[]
+- frequency TEXT
+- total_quote DECIMAL(10,2)
+- is_purchased BOOLEAN DEFAULT false
+- is_serviced BOOLEAN DEFAULT false
+- streakless_windows BOOLEAN DEFAULT false
+- sms_consent BOOLEAN DEFAULT false
+- preferred_contact TEXT
+- service_notes TEXT
+- conversation_notes TEXT
+- linear_ft INTEGER
+- windows_count INTEGER
+
+Only add fields that do not already exist.
+Do not drop, rename, or alter existing columns used by the current app unless absolutely necessary.
+
+--------------------------------------------------
+## EXACT SQUARE FOOTAGE RULE
+--------------------------------------------------
+
+Add exact_square_footage as a new nullable integer field across the system.
+
+Critical clarification:
+- house_sqft remains the rough quoted square footage used by the quote builder
+- exact_square_footage is separate and informational only
+- do not repurpose or reinterpret house_sqft
+- do not feed exact_square_footage into quote calculation logic
+
+Requirements:
+- Add exact_square_footage to DB schema
+- Make it editable in the admin lead detail view
+- Keep existing quote builder logic intact
+- For imported records, set exact_square_footage = NULL unless there is a clearly verified exact value source, which there is not in this CSV
+
+--------------------------------------------------
+## GEOCODING
+--------------------------------------------------
+
+For each imported record, attempt to geocode full_address to populate latitude and longitude.
+
+Use:
+- Google Maps Geocoding API if GOOGLE_MAPS_API_KEY exists in environment
+- otherwise fall back to Nominatim
+
+Requirements:
+- If geocoding fails, still import the row
+- Leave latitude/longitude null on failure
+- Log geocoding failures clearly
+- Normalize multiline addresses into a single-line string before geocoding
+
+Do not block the import on geocoding failures.
+
+--------------------------------------------------
+## MAP PIN BEHAVIOR
+--------------------------------------------------
+
+Imported historical records must show as map pins using the existing map framework.
+
+Requirements:
+- Current leads must preserve their exact current styling and behavior
+- Historical imported leads must be visually distinct
+- Historical pin styling must be driven by is_historical_import = true
+- Do not rely on source or branch string matching for pin styling
+
+Use one of these approaches:
+- different pin color, preferably crimson red #C0121A for historical Wolf Pack Wash imports
+- or a clearly distinct icon/marker style
+
+Add map filter/layer controls in admin:
+- All Leads
+- Current Leads (is_historical_import = false)
+- Historical Imports (is_historical_import = true)
+
+On pin click popup, show:
+- full name
+- address
+- services
+- total quote
+- source
+- branch
+- lead_year
+- historical import badge/label
+
+Do not remove or weaken any existing current pin functionality.
+
+--------------------------------------------------
+## DEDUPLICATION STRATEGY
+--------------------------------------------------
+
+Deduplicate using normalized address + phone_normalized.
+
+Rules:
+- If a matching existing record is found, do not overwrite it
+- Do not insert a second visible lead row for that duplicate by default
+- Log the duplicate in the import report with the matching existing record ID and identifying fields
+- The importer must be idempotent so rerunning it does not create duplicate leads
+
+If database-level duplicate tracking is useful and clean, prefer a separate import log/report structure rather than inserting duplicate lead rows into the canonical leads table.
+
+Only add duplicate_of_id or similar fields if there is a real implementation need and the architecture benefits from it.
+
+--------------------------------------------------
+## DATA QUALITY RULES FOR THIS CSV
+--------------------------------------------------
+
+Handle these known issues:
+
+1. Some records have no last name
+- import as empty string or null based on current schema conventions
+
+2. Some records have no address
+- import anyway
+- geocoding should fail gracefully
+- row should still be available in admin even if it cannot appear on map without coordinates
+
+3. Phone numbers are inconsistent
+- examples: (919) 555-1234, +15551234567, raw digits
+- store raw input in phone_raw
+- normalize to E.164 in phone_normalized where possible
+
+4. Total Quote has $ prefix
+- strip before parsing decimal
+
+5. Purchased and Serviced contain "checked" or empty
+- parse accordingly
+
+6. Some addresses contain embedded newlines
+- normalize to one line for storage/geocoding
+
+7. Some rows contain nonsense test data
+- import anyway unless clearly invalid according to critical field rules
+
+8. Duplicate customer entries exist
+- use the dedupe strategy above
+- keep the first or most complete existing record
+- do not create visible duplicates
+
+--------------------------------------------------
+## IMPORTER IMPLEMENTATION
+--------------------------------------------------
+
+Create the importer as a script in:
+
+/scripts/importLeads.js
+
+Requirements:
+- support DRY RUN mode
+- support real import mode
+- output a clear summary report
+- be safe to rerun
+- use Prisma and existing app environment configuration
+- avoid hardcoding secrets
+- log row-level issues clearly enough for troubleshooting
+
+If useful, add helper utilities for:
+- phone normalization
+- address normalization
+- boolean parsing
+- currency parsing
+- date parsing
+- CSV field mapping
+- geocoding
+
+--------------------------------------------------
+## ADMIN UI CHANGES
+--------------------------------------------------
+
+In the admin lead/quote detail view, clearly show:
+
+- source
+- branch
+- is_historical_import as badge/tag
+- import_batch
+- lead_year
+- exact_square_footage as inline-editable field
+- airtable_quote_id as read-only reference
+
+If the admin lead list or map sidebar supports extra metadata, surface historical/source status there too where helpful.
+
+--------------------------------------------------
+## STAGED IMPLEMENTATION PLAN
+--------------------------------------------------
+
+Work in this order and checkpoint after each stage:
+
+Stage 1:
+Inspect current schema, lead model, admin map logic, quote builder fields, and actual CSV headers.
+Report findings before making changes.
+
+Stage 2:
+Add required schema fields through additive Prisma/Supabase migration.
+Do not import any data yet.
+
+Stage 3:
+Build importer script with DRY RUN mode.
+Run DRY RUN on the full CSV and report results.
+Do not write data yet.
+
+Stage 4:
+Test real import with first 5 rows only.
+Report results.
+
+Stage 5:
+Run full real import.
+Log results.
+
+Stage 6:
+Update map rendering to distinguish historical pins and add filter/layer toggles.
+
+Stage 7:
+Add exact_square_footage to admin lead detail UI.
+
+Stage 8:
+Provide final summary of schema changes, files changed, mappings used, and manual run instructions.
+
+--------------------------------------------------
+## IMPORT SUMMARY REQUIRED
+--------------------------------------------------
+
+When the import completes, output:
+
+Total rows in CSV: ___
+Rows successfully imported: ___
+Rows skipped as duplicates: ___
+Rows skipped due to parse/validation issues: ___
+Rows with no address: ___
+Geocoding successes: ___
+Geocoding failures: ___
+Import batch ID: airtable-wpw-2025
+
+Also include:
+- exact CSV headers detected
+- exact field mapping used
+- any header mismatches from the spec
+- any rows with major problems and why
+- any manual follow-up steps required
+
+--------------------------------------------------
+## SAFETY RULES
+--------------------------------------------------
+
+1. Do not drop, rename, or repurpose any existing column the quote builder currently uses
+2. Do not delete any existing lead records
+3. Do not change existing current map pin behavior except to add historical pin support on top of it
+4. All schema changes must be additive only
+5. The import must be idempotent and safe to rerun
+6. Prefer targeted changes over broad refactors
+7. If the actual CSV headers differ from this spec, report that before finalizing import logic
+8. If any architectural ambiguity exists, pause after inspection and explain the options before making destructive assumptions
+
+--------------------------------------------------
+## ENVIRONMENT
+--------------------------------------------------
+
+- Database: Supabase PostgreSQL
+- ORM: Prisma
+- Geocoding: Google Maps Geocoding API if GOOGLE_MAPS_API_KEY exists, otherwise Nominatim
+- Import script: /scripts/importLeads.js
+
+Start with Stage 1 only:
+inspect the current schema, canonical lead table/model, admin map logic, quote builder dependencies, and actual CSV headers.
+Report findings before making any schema changes or running any import.
