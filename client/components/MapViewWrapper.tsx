@@ -28,6 +28,10 @@ interface MapViewWrapperProps {
   userInterfaceStyle?: "dark" | "light";
   webMarkers?: MarkerData[];
   webSelectedLocation?: { latitude: number; longitude: number } | null;
+  selectedLocationDraggable?: boolean;
+  onMarkerPress?: (id: string) => void;
+  onPinDragEnd?: (id: string, lat: number, lng: number) => void;
+  onSelectedPinDragEnd?: (lat: number, lng: number) => void;
 }
 
 const buildMapHtml = (lat: number, lng: number, dark: boolean) => `
@@ -67,10 +71,19 @@ const buildMapHtml = (lat: number, lng: number, dark: boolean) => `
 
     var statusColors = {
       not_home: '#9E9E9E',
+      knocked_no_answer: '#9E9E9E',
+      inaccessible: '#607D8B',
+      do_not_knock: '#B71C1C',
       not_interested: '#F44336',
+      revisit_needed: '#FF9800',
       follow_up: '#FFC107',
+      callback_set: '#FFC107',
+      quote_given: '#2196F3',
+      estimate_scheduled: '#9C27B0',
       sold: '#4CAF50',
+      won: '#4CAF50',
       completed: '#4A9B8E',
+      lost: '#F44336',
       new: '#2196F3'
     };
 
@@ -78,12 +91,23 @@ const buildMapHtml = (lat: number, lng: number, dark: boolean) => `
       return statusColors[status] || '#4A9B8E';
     }
 
-    function makeIcon(color) {
+    function makeIcon(color, size) {
+      size = size || 24;
       return L.divIcon({
         className: '',
-        html: '<div style="width:24px;height:24px;border-radius:50%;background:' + color + ';border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
+        html: '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35);cursor:grab;"></div>',
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2]
+      });
+    }
+
+    function makeDragIcon(color, size) {
+      size = size || 24;
+      return L.divIcon({
+        className: '',
+        html: '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';border:3px solid #FFD700;box-shadow:0 4px 12px rgba(0,0,0,0.5);cursor:grabbing;opacity:0.75;transform:scale(1.2);"></div>',
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2]
       });
     }
 
@@ -92,8 +116,62 @@ const buildMapHtml = (lat: number, lng: number, dark: boolean) => `
         map.removeLayer(markers[id]);
       }
       var color = getColor(status || 'new');
-      var m = L.marker([lat, lng], { icon: makeIcon(color) }).addTo(map);
+      var m = L.marker([lat, lng], { icon: makeIcon(color), draggable: false }).addTo(map);
       markers[id] = m;
+
+      var longPressTimer = null;
+      var isDragging = false;
+
+      function startLongPress() {
+        longPressTimer = setTimeout(function() {
+          isDragging = false;
+          m.dragging.enable();
+          m.setIcon(makeDragIcon(color));
+          map.dragging.disable();
+          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'markerLongPress', id: id
+          }));
+        }, 550);
+      }
+
+      function cancelLongPress() {
+        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      }
+
+      m.on('mousedown', startLongPress);
+      m.on('touchstart', startLongPress);
+      m.on('mouseup', cancelLongPress);
+      m.on('touchend', cancelLongPress);
+      m.on('touchcancel', cancelLongPress);
+      m.on('mousemove', cancelLongPress);
+      m.on('touchmove', cancelLongPress);
+
+      m.on('dragstart', function() {
+        isDragging = true;
+        cancelLongPress();
+      });
+
+      m.on('dragend', function() {
+        var pos = m.getLatLng();
+        m.dragging.disable();
+        m.setIcon(makeIcon(color));
+        map.dragging.enable();
+        setTimeout(function() { isDragging = false; }, 150);
+        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'pinDragEnd',
+          id: id,
+          latitude: pos.lat,
+          longitude: pos.lng
+        }));
+      });
+
+      m.on('click', function(e) {
+        L.DomEvent.stopPropagation(e);
+        if (isDragging) return;
+        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'markerPress', id: id
+        }));
+      });
     };
 
     window.clearMarkers = function() {
@@ -101,13 +179,40 @@ const buildMapHtml = (lat: number, lng: number, dark: boolean) => `
       markers = {};
     };
 
-    window.setSelectedMarker = function(lat, lng) {
+    window.setSelectedMarker = function(lat, lng, draggable) {
       if (selectedMarker) {
         map.removeLayer(selectedMarker);
+        selectedMarker = null;
       }
+      if (lat == null || lng == null) return;
       selectedMarker = L.marker([lat, lng], {
-        icon: makeIcon('#4A9B8E')
+        icon: makeIcon('#4A9B8E', 30),
+        draggable: !!draggable
       }).addTo(map);
+
+      if (draggable) {
+        selectedMarker.on('dragstart', function() {
+          selectedMarker.setIcon(makeDragIcon('#4A9B8E', 30));
+        });
+        selectedMarker.on('dragend', function() {
+          selectedMarker.setIcon(makeIcon('#4A9B8E', 30));
+          var pos = selectedMarker.getLatLng();
+          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'selectedPinDragEnd',
+            latitude: pos.lat,
+            longitude: pos.lng
+          }));
+        });
+      }
+    };
+
+    window.updateSelectedDraggable = function(draggable) {
+      if (!selectedMarker) return;
+      if (draggable) {
+        selectedMarker.dragging.enable();
+      } else {
+        selectedMarker.dragging.disable();
+      }
     };
 
     window.animateToRegion = function(lat, lng, latDelta) {
@@ -147,7 +252,9 @@ const buildMapHtml = (lat: number, lng: number, dark: boolean) => `
         } else if (msg.type === 'clearMarkers') {
           window.clearMarkers();
         } else if (msg.type === 'setSelectedMarker') {
-          window.setSelectedMarker(msg.latitude, msg.longitude);
+          window.setSelectedMarker(msg.latitude, msg.longitude, msg.draggable);
+        } else if (msg.type === 'updateSelectedDraggable') {
+          window.updateSelectedDraggable(msg.draggable);
         }
       } catch(err) {}
     });
@@ -166,6 +273,10 @@ export const MapViewWrapper = forwardRef<any, MapViewWrapperProps>(
       userInterfaceStyle,
       webMarkers,
       webSelectedLocation,
+      selectedLocationDraggable,
+      onMarkerPress,
+      onPinDragEnd,
+      onSelectedPinDragEnd,
     } = props;
 
     const webViewRef = useRef<WebView>(null);
@@ -196,11 +307,24 @@ export const MapViewWrapper = forwardRef<any, MapViewWrapperProps>(
     }, [webMarkers]);
 
     useEffect(() => {
-      if (!mapReadyRef.current || !webSelectedLocation) return;
+      if (!mapReadyRef.current) return;
+      if (webSelectedLocation) {
+        webViewRef.current?.injectJavaScript(
+          `window.setSelectedMarker(${webSelectedLocation.latitude}, ${webSelectedLocation.longitude}, ${selectedLocationDraggable ? "true" : "false"}); true;`
+        );
+      } else {
+        webViewRef.current?.injectJavaScript(
+          `window.setSelectedMarker(null, null, false); true;`
+        );
+      }
+    }, [webSelectedLocation, selectedLocationDraggable]);
+
+    useEffect(() => {
+      if (!mapReadyRef.current) return;
       webViewRef.current?.injectJavaScript(
-        `window.setSelectedMarker(${webSelectedLocation.latitude}, ${webSelectedLocation.longitude}); true;`
+        `window.updateSelectedDraggable(${selectedLocationDraggable ? "true" : "false"}); true;`
       );
-    }, [webSelectedLocation]);
+    }, [selectedLocationDraggable]);
 
     const handleMessage = useCallback(
       (event: any) => {
@@ -209,10 +333,7 @@ export const MapViewWrapper = forwardRef<any, MapViewWrapperProps>(
           if (msg.type === "press" && onPress) {
             onPress({
               nativeEvent: {
-                coordinate: {
-                  latitude: msg.latitude,
-                  longitude: msg.longitude,
-                },
+                coordinate: { latitude: msg.latitude, longitude: msg.longitude },
               },
             });
           } else if (msg.type === "regionChange" && onRegionChangeComplete) {
@@ -222,10 +343,17 @@ export const MapViewWrapper = forwardRef<any, MapViewWrapperProps>(
               latitudeDelta: msg.latitudeDelta,
               longitudeDelta: msg.longitudeDelta,
             });
+          } else if (msg.type === "markerPress" && onMarkerPress) {
+            onMarkerPress(msg.id);
+          } else if (msg.type === "markerLongPress") {
+          } else if (msg.type === "pinDragEnd" && onPinDragEnd) {
+            onPinDragEnd(msg.id, msg.latitude, msg.longitude);
+          } else if (msg.type === "selectedPinDragEnd" && onSelectedPinDragEnd) {
+            onSelectedPinDragEnd(msg.latitude, msg.longitude);
           }
         } catch {}
       },
-      [onPress, onRegionChangeComplete]
+      [onPress, onRegionChangeComplete, onMarkerPress, onPinDragEnd, onSelectedPinDragEnd]
     );
 
     const html = buildMapHtml(lat, lng, dark);

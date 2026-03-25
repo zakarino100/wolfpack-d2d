@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -31,6 +32,7 @@ import Animated, {
   useSharedValue,
   withSpring,
   interpolate,
+  runOnJS,
   FadeInUp,
   SlideInDown,
 } from "react-native-reanimated";
@@ -63,6 +65,8 @@ import { addPendingSync, getPendingSyncs, removePendingSync } from "@/lib/storag
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SEARCH_EXPANDED_WIDTH = SCREEN_WIDTH - 2 * Spacing.lg;
+const SHEET_EXPANDED = SCREEN_HEIGHT * 0.75;
+const SHEET_COLLAPSED = SCREEN_HEIGHT * 0.26;
 
 type CanvassMode = "view" | "add_pin";
 
@@ -152,13 +156,22 @@ export default function CanvassScreen() {
   const [followupPriority, setFollowupPriority] = useState<FollowupPriority | null>(null);
   const [notes, setNotes] = useState("");
 
-  const sheetHeight = useSharedValue(0);
+  const sheetH = useSharedValue(SHEET_EXPANDED);
+  const sheetStartH = useSharedValue(SHEET_EXPANDED);
+  const [sheetIsExpanded, setSheetIsExpanded] = useState(true);
 
   useEffect(() => {
     loadServices();
     loadPins();
     requestLocationPermission();
   }, []);
+
+  useEffect(() => {
+    if (showForm) {
+      sheetH.value = withSpring(SHEET_EXPANDED, { damping: 22, stiffness: 220 });
+      setSheetIsExpanded(true);
+    }
+  }, [showForm]);
 
   useEffect(() => {
     searchExpand.value = withSpring(searchOpen ? 1 : 0, { damping: 20, stiffness: 260 });
@@ -181,6 +194,37 @@ export default function CanvassScreen() {
 
   const animatedOtherBtnsStyle = useAnimatedStyle(() => ({
     opacity: interpolate(searchExpand.value, [0, 0.3], [1, 0]),
+  }));
+
+  const panGesture = Gesture.Pan()
+    .onBegin(() => {
+      sheetStartH.value = sheetH.value;
+    })
+    .onUpdate((e) => {
+      const newH = sheetStartH.value - e.translationY;
+      sheetH.value = Math.max(SHEET_COLLAPSED, Math.min(SHEET_EXPANDED, newH));
+    })
+    .onEnd(() => {
+      const mid = (SHEET_EXPANDED + SHEET_COLLAPSED) / 2;
+      const goExpanded = sheetH.value > mid;
+      sheetH.value = withSpring(
+        goExpanded ? SHEET_EXPANDED : SHEET_COLLAPSED,
+        { damping: 22, stiffness: 220 }
+      );
+      runOnJS(setSheetIsExpanded)(goExpanded);
+    });
+
+  const animatedSheetStyle = useAnimatedStyle(() => ({
+    height: sheetH.value,
+  }));
+
+  const miniHeaderStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(sheetH.value, [SHEET_COLLAPSED, SHEET_COLLAPSED + 60], [1, 0], "clamp"),
+  }));
+
+  const fullFormStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(sheetH.value, [SHEET_COLLAPSED + 30, SHEET_COLLAPSED + 90], [0, 1], "clamp"),
+    flex: 1,
   }));
 
   const loadServices = async () => {
@@ -549,6 +593,80 @@ export default function CanvassScreen() {
     setExistingLead(null);
   };
 
+  const handleMarkerPress = useCallback((id: string) => {
+    const pin = pins.find((p) => p.id === id);
+    if (pin) {
+      markerPressedRef.current = true;
+      setPreviewPin(pin);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, [pins]);
+
+  const handleSelectedPinDragEnd = useCallback(async (lat: number, lng: number) => {
+    setSelectedLocation({ latitude: lat, longitude: lng });
+    setGeocoding(true);
+    sheetH.value = withSpring(SHEET_EXPANDED, { damping: 22, stiffness: 220 });
+    setSheetIsExpanded(true);
+    const addressData = await reverseGeocode(lat, lng);
+    const finalAddress = addressData || {
+      address_line1: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+      city: "", state: "", zip: "", latitude: lat, longitude: lng,
+    };
+    setAddress(finalAddress);
+    setEditableAddress(finalAddress.address_line1);
+    setGeocoding(false);
+    const existing = await checkExistingLead(finalAddress);
+    setExistingLead(existing);
+    if (existing) {
+      const nameParts = (existing.homeowner_name || "").trim().split(/\s+/);
+      setFirstName(nameParts[0] || "");
+      setLastName(nameParts.slice(1).join(" ") || "");
+      setPhone(existing.phone || "");
+      setEmail(existing.email || "");
+      setServicesInterested(existing.services_interested || []);
+    }
+  }, [pins]);
+
+  const handlePinDragEnd = useCallback(async (id: string, lat: number, lng: number) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const addressData = await reverseGeocode(lat, lng);
+      const finalAddress = addressData || {
+        address_line1: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+        city: "", state: "", zip: "", latitude: lat, longitude: lng,
+      };
+      await apiRequest("PUT", `/api/pins/${id}`, {
+        latitude: lat,
+        longitude: lng,
+        address_line1: finalAddress.address_line1,
+        city: finalAddress.city,
+        state: finalAddress.state,
+        zip: finalAddress.zip,
+      });
+      const pin = pins.find((p) => p.id === id);
+      if (pin?.lead?.id) {
+        await apiRequest("PUT", `/api/leads/${pin.lead.id}`, {
+          address_line1: finalAddress.address_line1,
+          city: finalAddress.city,
+          state: finalAddress.state,
+          zip: finalAddress.zip,
+          latitude: lat,
+          longitude: lng,
+        });
+      }
+      setPins((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, latitude: lat, longitude: lng, address_line1: finalAddress.address_line1, city: finalAddress.city, state: finalAddress.state, zip: finalAddress.zip }
+            : p
+        )
+      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      console.warn("Pin drag update failed:", err);
+    }
+  }, [pins]);
+
   const handleSave = async () => {
     if (!outcome) {
       Alert.alert("Missing Info", "Please select a door outcome");
@@ -766,6 +884,10 @@ export default function CanvassScreen() {
             status: p.status || p.lead?.status || "new",
           }))}
         webSelectedLocation={selectedLocation}
+        selectedLocationDraggable={showForm}
+        onMarkerPress={handleMarkerPress}
+        onPinDragEnd={handlePinDragEnd}
+        onSelectedPinDragEnd={handleSelectedPinDragEnd}
       >
         {selectedLocation ? (
           <MapMarker
@@ -974,17 +1096,47 @@ export default function CanvassScreen() {
 
       {showForm && address ? (
         <Animated.View
-          entering={SlideInDown.duration(300)}
           style={[
             styles.bottomSheet,
             { backgroundColor: theme.backgroundRoot },
             Shadows.lg,
+            animatedSheetStyle,
           ]}
         >
-          <View style={styles.sheetHandle}>
-            <View style={[styles.handle, { backgroundColor: theme.border }]} />
-          </View>
+          <GestureDetector gesture={panGesture}>
+            <View style={styles.sheetHandle}>
+              <View style={[styles.handle, { backgroundColor: theme.border }]} />
+              <Animated.View style={[styles.miniHeader, miniHeaderStyle]}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <ThemedText type="body" style={{ fontWeight: "600" }} numberOfLines={1}>
+                    {editableAddress || "New Pin"}
+                  </ThemedText>
+                  <ThemedText type="small" style={{ color: theme.textSecondary }} numberOfLines={1}>
+                    {[address.city, address.state, address.zip].filter(Boolean).join(", ") || "Tap to geocode"}
+                  </ThemedText>
+                </View>
+                <View style={{ marginLeft: Spacing.sm }}>
+                  {outcome ? (
+                    <StatusBadge status={outcome} />
+                  ) : existingLead ? (
+                    <StatusBadge status={existingLead.status} />
+                  ) : (
+                    <View style={[styles.newBadge, { backgroundColor: `${theme.success}20` }]}>
+                      <ThemedText type="small" style={{ color: theme.success, fontWeight: "600" }}>New</ThemedText>
+                    </View>
+                  )}
+                </View>
+              </Animated.View>
+              <Animated.View style={[styles.miniHint, miniHeaderStyle]}>
+                <Feather name="move" size={11} color={theme.textSecondary} />
+                <ThemedText type="small" style={{ color: theme.textSecondary, marginLeft: 4 }}>
+                  Drag pin to adjust location  •  Swipe up to continue
+                </ThemedText>
+              </Animated.View>
+            </View>
+          </GestureDetector>
 
+          <Animated.View style={fullFormStyle} pointerEvents={sheetIsExpanded ? "auto" : "none"}>
           <ScrollView
             style={styles.formScroll}
             contentContainerStyle={styles.formContent}
@@ -1184,6 +1336,7 @@ export default function CanvassScreen() {
               </View>
             ) : null}
           </ScrollView>
+          </Animated.View>
         </Animated.View>
       ) : (
         <View style={[styles.hint, { bottom: insets.bottom + Spacing.xl }]}>
@@ -1257,18 +1410,33 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    maxHeight: SCREEN_HEIGHT * 0.75,
     borderTopLeftRadius: BorderRadius.xl,
     borderTopRightRadius: BorderRadius.xl,
+    overflow: "hidden",
   },
   sheetHandle: {
     alignItems: "center",
-    paddingVertical: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
   },
   handle: {
     width: 40,
     height: 4,
     borderRadius: 2,
+    marginBottom: Spacing.sm,
+  },
+  miniHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    paddingTop: Spacing.xs,
+  },
+  miniHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: Spacing.xs,
+    paddingBottom: Spacing.xs,
   },
   formScroll: {
     flex: 1,
