@@ -368,6 +368,9 @@ export default function CanvassScreen() {
     setSelectedLocation({ latitude, longitude });
     setCanvassMode("view");
 
+    // Clear all previous form state before opening for a new pin
+    resetForm();
+
     // Show form immediately with loading state
     setAddress({
       address_line1: "Looking up address...",
