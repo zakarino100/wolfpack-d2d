@@ -716,7 +716,8 @@ export default function CanvassScreen() {
     setSaving(true);
 
     try {
-      const doorOnly = isDoorOutcome(outcome) && outcome !== "answered";
+      const hasContactInfo = !!(firstName.trim() || lastName.trim() || phone.trim() || email.trim());
+      const doorOnly = isDoorOutcome(outcome) && !hasContactInfo;
       const payload = {
         pin: {
           title: finalAddress.address_line1,
@@ -1030,6 +1031,22 @@ export default function CanvassScreen() {
               if (previewPin.lead) {
                 setPreviewPin(null);
                 navigation.navigate("LeadDetail", { leadId: previewPin.lead.id });
+              } else {
+                const addr: AddressData = {
+                  address_line1: previewPin.address_line1 || previewPin.title || "",
+                  city: previewPin.city || "",
+                  state: previewPin.state || "",
+                  zip: previewPin.zip || "",
+                  latitude: previewPin.latitude,
+                  longitude: previewPin.longitude,
+                };
+                resetForm();
+                setSelectedLocation({ latitude: previewPin.latitude, longitude: previewPin.longitude });
+                setAddress(addr);
+                setEditableAddress(addr.address_line1);
+                setCanvassMode("add_pin");
+                setShowForm(true);
+                setPreviewPin(null);
               }
             }}
           >
@@ -1075,14 +1092,12 @@ export default function CanvassScreen() {
               </View>
             ) : null}
 
-            {previewPin.lead ? (
-              <View style={[styles.previewFooter, { borderTopColor: theme.borderLight }]}>
-                <ThemedText type="small" style={{ color: theme.primary, fontWeight: "600" }}>
-                  Tap to view details
-                </ThemedText>
-                <Feather name="chevron-right" size={16} color={theme.primary} />
-              </View>
-            ) : null}
+            <View style={[styles.previewFooter, { borderTopColor: theme.borderLight }]}>
+              <ThemedText type="small" style={{ color: theme.primary, fontWeight: "600" }}>
+                {previewPin.lead ? "Tap to view details" : "Tap to log a touch"}
+              </ThemedText>
+              <Feather name="chevron-right" size={16} color={theme.primary} />
+            </View>
           </Pressable>
 
           <Pressable
