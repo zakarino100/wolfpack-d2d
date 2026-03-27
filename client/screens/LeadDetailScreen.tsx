@@ -147,7 +147,7 @@ export default function LeadDetailScreen() {
       setEditCity(lead.city || "");
       setEditState(lead.state || "");
       setEditZip(lead.zip || "");
-      setEditNotes((lead as any).notes || "");
+      setEditNotes(lead.conversation_notes || "");
       setEditLostReason((lead as any).lost_reason || null);
       setEditServices(lead.services_interested || []);
       setEditStatus(lead.status as TouchOutcome || null);
@@ -280,7 +280,7 @@ export default function LeadDetailScreen() {
         zip: editZip || lead.zip,
         latitude: lat,
         longitude: lng,
-        notes: editNotes || null,
+        conversation_notes: editNotes || null,
         lost_reason: editStatus === "lost" ? editLostReason : null,
         services_interested: editServices.length > 0 ? editServices : null,
         status: editStatus || lead.status,
@@ -617,7 +617,7 @@ export default function LeadDetailScreen() {
                       setEditCity(lead.city || "");
                       setEditState(lead.state || "");
                       setEditZip(lead.zip || "");
-                      setEditNotes((lead as any).notes || "");
+                      setEditNotes(lead.conversation_notes || "");
                       setEditLostReason((lead as any).lost_reason || null);
                       setEditServices(lead.services_interested || []);
                       setEditStatus(lead.status as TouchOutcome || null);

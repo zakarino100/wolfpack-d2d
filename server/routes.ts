@@ -523,7 +523,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ALLOWED_FIELDS = [
         "homeowner_name", "phone", "email", "status",
         "services_interested", "last_touch_at", "next_followup_at",
-        "followup_channel", "followup_priority", "notes",
+        "followup_channel", "followup_priority",
+        "conversation_notes", "service_notes",
         "address_line1", "city", "state", "zip", "latitude", "longitude",
         "lost_reason",
       ];
@@ -540,6 +541,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (req.body[field] !== undefined) {
           sanitized[field] = req.body[field];
         }
+      }
+      // Remap legacy "notes" field to "conversation_notes"
+      if (req.body.notes !== undefined && sanitized.conversation_notes === undefined) {
+        sanitized.conversation_notes = req.body.notes;
       }
 
       if (sanitized.status && !VALID_STATUSES.includes(sanitized.status as string)) {
