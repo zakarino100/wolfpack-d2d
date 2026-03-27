@@ -38,7 +38,8 @@ import { ServiceCheckbox } from "@/components/ServiceCheckbox";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
 import { BorderRadius, Spacing, Shadows } from "@/constants/theme";
-import { Lead, Touch, Quote, Media, TouchOutcome, Service } from "@/types";
+import { Lead, Touch, Quote, Media, TouchOutcome, Service, QuoteLineItem } from "@/types";
+import { QuoteBuilder } from "@/components/QuoteBuilder";
 import { apiRequest } from "@/lib/query-client";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -95,6 +96,7 @@ export default function LeadDetailScreen() {
   const [editLostReason, setEditLostReason] = useState<string | null>(null);
   const [editServices, setEditServices] = useState<string[]>([]);
   const [editStatus, setEditStatus] = useState<TouchOutcome | null>(null);
+  const [editQuoteLineItems, setEditQuoteLineItems] = useState<QuoteLineItem[]>([]);
   const [saving, setSaving] = useState(false);
 
   const [showNewTouch, setShowNewTouch] = useState(false);
@@ -300,9 +302,24 @@ export default function LeadDetailScreen() {
         }
       }
 
+      const needsQuote = (editStatus === "quote_given" || editStatus === "sold" || editStatus === "won") && editQuoteLineItems.length > 0;
+      if (needsQuote) {
+        const total = editQuoteLineItems.reduce((sum, item) => sum + item.price, 0);
+        try {
+          await apiRequest("POST", `/api/leads/${leadId}/quotes`, {
+            line_items: editQuoteLineItems,
+            quote_amount: total,
+          });
+        } catch {
+          // quote save failed silently — lead update still succeeded
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ["/api/leads", leadId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", leadId, "quotes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/pins"] });
       setIsEditing(false);
+      setEditQuoteLineItems([]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
       Alert.alert("Error", "Failed to update lead");
@@ -567,6 +584,19 @@ export default function LeadDetailScreen() {
                 selected={editServices}
                 onChange={setEditServices}
               />
+              {editStatus === "quote_given" || editStatus === "sold" || editStatus === "won" ? (
+                <QuoteBuilder
+                  services={services}
+                  lineItems={editQuoteLineItems}
+                  onChange={(items) => {
+                    setEditQuoteLineItems(items);
+                    if (editStatus === "sold" || editStatus === "won") {
+                      const fromQuote = items.map((li) => li.service).filter(Boolean);
+                      setEditServices((prev) => [...new Set([...prev, ...fromQuote])]);
+                    }
+                  }}
+                />
+              ) : null}
               <View style={styles.editActions}>
                 <Button
                   onPress={handleSaveEdit}
@@ -591,6 +621,7 @@ export default function LeadDetailScreen() {
                       setEditLostReason((lead as any).lost_reason || null);
                       setEditServices(lead.services_interested || []);
                       setEditStatus(lead.status as TouchOutcome || null);
+                      setEditQuoteLineItems([]);
                     }
                   }}
                   style={styles.cancelEditBtn}

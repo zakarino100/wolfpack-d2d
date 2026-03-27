@@ -611,6 +611,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/leads/:id/quotes", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user as UserPayload;
+      const { line_items, quote_amount } = req.body;
+      const quote = await createQuote({
+        lead_id: req.params.id,
+        rep_email: user.email,
+        quote_line_items: line_items || [],
+        quote_amount: quote_amount || null,
+      });
+      res.json({ quote });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save quote" });
+    }
+  });
+
   app.get("/api/leads/:id/media", authMiddleware, async (req: Request, res: Response) => {
     try {
       const media = await getMedia(req.params.id);
