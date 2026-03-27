@@ -140,7 +140,9 @@ export default function CanvassScreen() {
   const [previewPin, setPreviewPin] = useState<any | null>(null);
   const markerPressedRef = useRef(false);
 
-  const [outcome, setOutcome] = useState<TouchOutcome | null>(null);
+  const [doorOutcome, setDoorOutcome] = useState<TouchOutcome | null>(null);
+  const [leadStage, setLeadStage] = useState<TouchOutcome | null>(null);
+  const outcome = leadStage ?? doorOutcome;
   const [lostReason, setLostReason] = useState<string | null>(null);
   const [mapType, setMapType] = useState<"standard" | "satellite" | "hybrid">("standard");
   const [answeredAt, setAnsweredAt] = useState<Date | null>(null);
@@ -576,7 +578,8 @@ export default function CanvassScreen() {
   };
 
   const resetForm = () => {
-    setOutcome(null);
+    setDoorOutcome(null);
+    setLeadStage(null);
     setLostReason(null);
     setAnsweredAt(null);
     setEditableAddress("");
@@ -668,7 +671,7 @@ export default function CanvassScreen() {
   }, [pins]);
 
   const handleSave = async () => {
-    if (!outcome) {
+    if (!doorOutcome) {
       Alert.alert("Missing Info", "Please select a door outcome");
       return;
     }
@@ -706,11 +709,13 @@ export default function CanvassScreen() {
       address_line1: editableAddress.trim() || address.address_line1,
     };
 
-    const answeredNote = outcome === "answered" && answeredAt
+    const answeredNote = doorOutcome === "answered" && answeredAt
       ? `Answered at ${answeredAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. ` : "";
+    const doorNote = leadStage && doorOutcome
+      ? `Door: ${DOOR_OUTCOME_OPTIONS.find(o => o.value === doorOutcome)?.label || doorOutcome}. ` : "";
     const lostNote = outcome === "lost" && lostReason
       ? `Lost reason: ${LOST_REASON_OPTIONS.find(r => r.value === lostReason)?.label || lostReason}. ` : "";
-    const combinedNotes = `${answeredNote}${lostNote}${notes}`.trim() || null;
+    const combinedNotes = `${answeredNote}${doorNote}${lostNote}${notes}`.trim() || null;
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
@@ -1199,17 +1204,16 @@ export default function CanvassScreen() {
 
             <FormSelect
               label="Door Outcome *"
-              value={isDoorOutcome(outcome) ? outcome : null}
+              value={doorOutcome}
               options={DOOR_OUTCOME_OPTIONS}
               onChange={(val) => {
-                setOutcome(val);
+                setDoorOutcome(val);
                 if (val === "answered") setAnsweredAt(new Date());
                 else setAnsweredAt(null);
-                if (val !== "lost") setLostReason(null);
               }}
             />
 
-            {outcome === "answered" && answeredAt ? (
+            {doorOutcome === "answered" && answeredAt ? (
               <View style={[styles.answeredRow, { backgroundColor: `${theme.statusAnswered}15` }]}>
                 <Feather name="clock" size={14} color={theme.statusAnswered} />
                 <ThemedText type="small" style={{ color: theme.statusAnswered, marginLeft: Spacing.xs }}>
@@ -1220,10 +1224,10 @@ export default function CanvassScreen() {
 
             <FormSelect
               label="Lead Stage (select if engaged)"
-              value={!isDoorOutcome(outcome) ? outcome : null}
+              value={leadStage}
               options={LEAD_OUTCOME_OPTIONS}
               onChange={(val) => {
-                setOutcome(val);
+                setLeadStage(val);
                 if (val !== "lost") setLostReason(null);
               }}
             />
