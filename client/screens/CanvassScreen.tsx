@@ -799,7 +799,10 @@ export default function CanvassScreen() {
         created_at: new Date().toISOString(),
         retries: 0,
       });
-      Alert.alert("Offline", "Saved locally. Will sync when online.");
+      setSelectedLocation(null);
+      resetForm();
+      setShowForm(false);
+      setAddress(null);
     } finally {
       setSaving(false);
     }
