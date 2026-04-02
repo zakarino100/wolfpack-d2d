@@ -758,7 +758,6 @@ export default function CanvassScreen() {
           followup_channel: followupChannel,
           followup_priority: followupPriority,
           answered_at: outcome === "answered" ? (answeredAt || new Date()).toISOString() : null,
-          lost_reason: outcome === "lost" ? lostReason : null,
         },
         quote:
           quoteLineItems.length > 0

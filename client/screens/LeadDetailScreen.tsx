@@ -250,8 +250,13 @@ export default function LeadDetailScreen() {
   const handleSaveEdit = async () => {
     if (!lead) return;
     const isSaleOrQuote = editStatus === "sold" || editStatus === "won" || editStatus === "quote_given" || editStatus === "estimate_scheduled";
+    const isSale = editStatus === "sold" || editStatus === "won";
     if (isSaleOrQuote && !editPhone.trim()) {
       Alert.alert("Phone Required", "Phone number is required to save a sale or quote");
+      return;
+    }
+    if (isSale && editQuoteLineItems.length === 0) {
+      Alert.alert("Quote Required", "Please add at least one service to the quote before saving a sale");
       return;
     }
     setSaving(true);
@@ -590,17 +595,27 @@ export default function LeadDetailScreen() {
                 onChange={setEditServices}
               />
               {editStatus === "quote_given" || editStatus === "sold" || editStatus === "won" ? (
-                <QuoteBuilder
-                  services={services}
-                  lineItems={editQuoteLineItems}
-                  onChange={(items) => {
-                    setEditQuoteLineItems(items);
-                    if (editStatus === "sold" || editStatus === "won") {
-                      const fromQuote = items.map((li) => li.service).filter(Boolean);
-                      setEditServices((prev) => [...new Set([...prev, ...fromQuote])]);
-                    }
-                  }}
-                />
+                <View>
+                  {(editStatus === "sold" || editStatus === "won") && editQuoteLineItems.length === 0 ? (
+                    <View style={[styles.quoteRequiredBanner, { backgroundColor: `${theme.statusSold}15`, borderColor: theme.statusSold }]}>
+                      <Feather name="alert-circle" size={15} color={theme.statusSold} />
+                      <ThemedText type="small" style={{ color: theme.statusSold, marginLeft: 6, flex: 1, fontWeight: "600" }}>
+                        A quote is required to save a sale — add at least one service below
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                  <QuoteBuilder
+                    services={services}
+                    lineItems={editQuoteLineItems}
+                    onChange={(items) => {
+                      setEditQuoteLineItems(items);
+                      if (editStatus === "sold" || editStatus === "won") {
+                        const fromQuote = items.map((li) => li.service).filter(Boolean);
+                        setEditServices((prev) => [...new Set([...prev, ...fromQuote])]);
+                      }
+                    }}
+                  />
+                </View>
               ) : null}
               <View style={styles.editActions}>
                 <Button
@@ -986,6 +1001,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing.md,
     marginTop: Spacing.lg,
+  },
+  quoteRequiredBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
   },
   cancelEditBtn: {
     alignItems: "center",

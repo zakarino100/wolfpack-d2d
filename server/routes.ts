@@ -1031,8 +1031,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (result.lead && touch) {
+        // Strip fields that don't exist on d2d_touches (prevent schema errors)
+        const { lost_reason: _lr, ...safeTouch } = touch as any;
         const touchData = await createTouch({
-          ...touch,
+          ...safeTouch,
           lead_id: result.lead.id,
           rep_email: user.email,
         });
