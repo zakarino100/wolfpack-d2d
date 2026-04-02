@@ -681,6 +681,7 @@ export default function CanvassScreen() {
     }
 
     const isSale = outcome === "sold" || outcome === "won";
+    const isQuote = outcome === "quote_given" || outcome === "estimate_scheduled";
     if (isSale) {
       if (!firstName.trim()) {
         Alert.alert("Required for Sale", "Customer first name is required");
@@ -691,13 +692,13 @@ export default function CanvassScreen() {
         return;
       }
       if (!phone.trim()) {
-        Alert.alert("Required for Sale", "Customer phone number is required");
+        Alert.alert("Required for Sale", "Phone number is required to save a sale");
         return;
       }
-      if (!email.trim()) {
-        Alert.alert("Required for Sale", "Customer email is required");
-        return;
-      }
+    }
+    if (isQuote && !phone.trim()) {
+      Alert.alert("Required for Quote", "Phone number is required to save a quote");
+      return;
     }
 
     const autoServices = isSale && quoteLineItems.length > 0
@@ -1262,7 +1263,7 @@ export default function CanvassScreen() {
                 </View>
 
                 <FormInput
-                  label={(outcome === "sold" || outcome === "won") ? "Phone *" : "Phone"}
+                  label={(outcome === "sold" || outcome === "won" || outcome === "quote_given" || outcome === "estimate_scheduled") ? "Phone *" : "Phone"}
                   value={phone}
                   onChangeText={setPhone}
                   placeholder="(555) 123-4567"
@@ -1270,7 +1271,7 @@ export default function CanvassScreen() {
                 />
 
                 <FormInput
-                  label={(outcome === "sold" || outcome === "won") ? "Email *" : "Email"}
+                  label="Email"
                   value={email}
                   onChangeText={setEmail}
                   placeholder="john@example.com"

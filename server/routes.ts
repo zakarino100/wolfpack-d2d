@@ -1006,6 +1006,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { pin: pinData, lead: leadData, touch, quote } = req.body;
 
       const leadStatus = touch?.outcome || "new";
+
+      // Phone required for sales and quotes
+      const PHONE_REQUIRED_STATUSES = ["sold", "won", "quote_given", "estimate_scheduled"];
+      if (PHONE_REQUIRED_STATUSES.includes(leadStatus) && leadData && !leadData.phone) {
+        return res.status(400).json({ error: "Phone number is required to save a sale or quote" });
+      }
       const result = await createLeadWithPin(
         {
           pin: { ...pinData, created_by: user.email },

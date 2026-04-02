@@ -249,6 +249,11 @@ export default function LeadDetailScreen() {
 
   const handleSaveEdit = async () => {
     if (!lead) return;
+    const isSaleOrQuote = editStatus === "sold" || editStatus === "won" || editStatus === "quote_given" || editStatus === "estimate_scheduled";
+    if (isSaleOrQuote && !editPhone.trim()) {
+      Alert.alert("Phone Required", "Phone number is required to save a sale or quote");
+      return;
+    }
     setSaving(true);
     try {
       const addressChanged = editAddress.trim() !== (lead.address_line1 || "");
