@@ -94,7 +94,14 @@ export default function AdminMapScreen() {
     return true;
   });
 
-  const getMarkerConfig = (status: string): { color: string; icon: string } => {
+  const INTERNET_LEAD_PURPLE = "#7c3aed";
+  const INTERNET_SOURCES = ["ad", "wolf_pack_wash_website", "meta", "facebook"];
+
+  const getMarkerConfig = (status: string, pin?: Pin): { color: string; icon: string } => {
+    // Purple pins for paid internet leads (FB ads, website form)
+    if (pin?.lead?.source && INTERNET_SOURCES.some((s) => pin.lead!.source.toLowerCase().includes(s))) {
+      return { color: INTERNET_LEAD_PURPLE, icon: "globe" };
+    }
     const iconMap: Record<string, string> = {
       knocked_no_answer: "minus-circle",
       not_home:          "minus-circle",
@@ -116,8 +123,8 @@ export default function AdminMapScreen() {
     return { color, icon };
   };
 
-  const CustomMarker = ({ status, isHistorical }: { status: string; isHistorical?: boolean }) => {
-    const config = getMarkerConfig(status);
+  const CustomMarker = ({ status, isHistorical, pin }: { status: string; isHistorical?: boolean; pin?: Pin }) => {
+    const config = getMarkerConfig(status, pin);
     const bgColor = isHistorical ? HISTORICAL_CRIMSON : config.color;
     const icon = isHistorical ? "archive" : (config.icon as any);
     return (
@@ -203,6 +210,7 @@ export default function AdminMapScreen() {
               <CustomMarker
                 status={pin.status || pin.lead?.status || "not_home"}
                 isHistorical={!!(pin.lead as any)?.is_historical_import}
+                pin={pin}
               />
             </MapMarker>
           ) : null
@@ -285,6 +293,10 @@ export default function AdminMapScreen() {
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: HISTORICAL_CRIMSON }]} />
           <ThemedText type="small">Historical WPW</ThemedText>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: INTERNET_LEAD_PURPLE }]} />
+          <ThemedText type="small">Internet Lead</ThemedText>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: theme.primary, borderRadius: 6 }]} />
