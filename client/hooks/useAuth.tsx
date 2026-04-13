@@ -16,6 +16,7 @@ import {
   clearAllStorage,
 } from "@/lib/storage";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
+import { setUnauthorizedHandler } from "@/lib/authEvents";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -158,6 +159,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await clearAllStorage();
     setUser(null);
   }, []);
+
+  // Wire global 401 handler so expired tokens auto-logout
+  useEffect(() => {
+    setUnauthorizedHandler(signOut);
+  }, [signOut]);
 
   const isAdmin = user?.role === "admin";
 

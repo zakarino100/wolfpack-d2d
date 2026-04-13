@@ -1,5 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getAuthToken } from "./storage";
+import { fireUnauthorized } from "./authEvents";
 
 /**
  * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
@@ -19,6 +20,9 @@ export function getApiUrl(): string {
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status === 401) {
+      fireUnauthorized();
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
@@ -70,8 +74,9 @@ export const getQueryFn: <T>(options: {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      fireUnauthorized();
+      if (unauthorizedBehavior === "returnNull") return null;
     }
 
     await throwIfResNotOk(res);
