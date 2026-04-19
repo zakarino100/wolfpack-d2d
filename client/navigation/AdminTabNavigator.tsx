@@ -10,15 +10,19 @@ import AllLeadsScreen from "@/screens/admin/AllLeadsScreen";
 import AnalyticsScreen from "@/screens/admin/AnalyticsScreen";
 import TeamScreen from "@/screens/admin/TeamScreen";
 import ImportScreen from "@/screens/admin/ImportScreen";
+import NotificationsScreen from "@/screens/admin/NotificationsScreen";
 import CanvassScreen from "@/screens/CanvassScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useTheme } from "@/hooks/useTheme";
+import { useQuery } from "@tanstack/react-query";
+import { Lead } from "@/types";
 
 export type AdminTabParamList = {
   LiveMapTab: undefined;
   CanvassTab: undefined;
   RouteBuilderTab: undefined;
   AllLeadsTab: undefined;
+  NotificationsTab: undefined;
   AnalyticsTab: undefined;
   TeamTab: undefined;
   ImportTab: undefined;
@@ -26,8 +30,22 @@ export type AdminTabParamList = {
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
 
+const INBOUND_SOURCES = ["ad", "wolf_pack_wash_website", "call", "Meta - Wolf Pack Wash"];
+
 export default function AdminTabNavigator() {
   const { theme, isDark } = useTheme();
+
+  // Badge count — new inbound leads in last 24h
+  const { data: leadsData } = useQuery<{ leads: Lead[] }>({
+    queryKey: ["/api/leads"],
+    refetchInterval: 30000,
+  });
+  const newInboundCount = (leadsData?.leads ?? []).filter(l =>
+    (INBOUND_SOURCES.some(s => l.source?.includes(s)) || (l.source !== "d2d" && l.source !== "referral" && l.created_by !== "canvass")) &&
+    Date.now() - new Date(l.created_at).getTime() < 86400000 &&
+    (l.status === "follow_up" || (l.status as string) === "new")
+  ).length;
+
   return (
     <Tab.Navigator
       initialRouteName="LiveMapTab"
@@ -100,6 +118,18 @@ export default function AdminTabNavigator() {
           headerTitle: () => <HeaderTitle title="All Leads" />,
           tabBarIcon: ({ color, size }) => (
             <Feather name="users" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="NotificationsTab"
+        component={NotificationsScreen}
+        options={{
+          title: "Inbound",
+          headerTitle: () => <HeaderTitle title="Inbound Leads" />,
+          tabBarBadge: newInboundCount > 0 ? newInboundCount : undefined,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="bell" size={size} color={color} />
           ),
         }}
       />
