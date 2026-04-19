@@ -134,8 +134,15 @@ export default function AdminMapScreen() {
     );
   };
 
-  const RepDot = ({ color }: { color: string }) => (
-    <View style={[markerStyles.repDot, { backgroundColor: color, borderColor: theme.backgroundRoot }]} />
+  const RepDot = ({ color, name }: { color: string; name?: string }) => (
+    <View style={{ alignItems: "center" }}>
+      <View style={[markerStyles.repDot, { backgroundColor: color, borderColor: theme.backgroundRoot }]} />
+      {name ? (
+        <ThemedText style={{ fontSize: 9, color, fontWeight: "700", marginTop: 2 }}>
+          {name.split(" ")[0]}
+        </ThemedText>
+      ) : null}
+    </View>
   );
 
   const handleMapPress = useCallback(() => {
@@ -222,7 +229,10 @@ export default function AdminMapScreen() {
             coordinate={{ latitude: rep.lat, longitude: rep.lng }}
             tracksViewChanges={false}
           >
-            <RepDot color={theme.primary} />
+            <RepDot
+              color={rep.role === "technician" ? "#F59E0B" : theme.primary}
+              name={rep.name ?? rep.rep_name ?? undefined}
+            />
           </MapMarker>
         ))}
       </MapViewWrapper>
@@ -300,7 +310,11 @@ export default function AdminMapScreen() {
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: theme.primary, borderRadius: 6 }]} />
-          <ThemedText type="small">Rep</ThemedText>
+          <ThemedText type="small">Sales Rep</ThemedText>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: "#F59E0B", borderRadius: 6 }]} />
+          <ThemedText type="small">Technician</ThemedText>
         </View>
       </View>
 

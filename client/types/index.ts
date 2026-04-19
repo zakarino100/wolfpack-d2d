@@ -222,6 +222,34 @@ export interface RepLocation {
   lat: number;
   lng: number;
   recorded_at: string;
+  // Tech module additions
+  name?: string;
+  role?: "canvasser" | "technician" | "admin";
+  last_seen?: string;
+}
+
+export interface TechUser {
+  id: number;
+  name: string;
+  role: "technician" | "canvasser" | "admin";
+  skills: string[];
+  pay_cut_pct: number;
+  token: string;
+}
+
+export interface TechJob {
+  id: number;
+  customerFirstName: string;
+  customerLastName: string;
+  customerAddress: string;
+  customerCity: string;
+  customerPhone: string;
+  serviceType: string;
+  status: string;
+  scheduledAt: string | null;
+  soldPrice: string | null;
+  techCut: string | null;
+  notes: string | null;
 }
 
 export interface AnalyticsSummary {

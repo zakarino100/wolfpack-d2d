@@ -19,7 +19,7 @@ const logo = require("../../assets/images/logo.png");
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export default function LoginScreen() {
+export default function LoginScreen({ navigation }: any) {
   const { theme } = useTheme();
   const { signInWithGoogle, isLoading } = useAuth();
   const scale = useSharedValue(1);
@@ -72,6 +72,16 @@ export default function LoginScreen() {
         <ThemedText type="small" style={styles.footer}>
           Field sales reps only. Contact admin for access.
         </ThemedText>
+
+        <Pressable
+          onPress={() => navigation?.navigate("TechLogin")}
+          style={styles.techLoginBtn}
+        >
+          <Feather name="tool" size={14} color="rgba(255,255,255,0.7)" />
+          <ThemedText type="small" style={{ color: "rgba(255,255,255,0.7)", marginLeft: 6 }}>
+            I'm a Technician — Enter PIN
+          </ThemedText>
+        </Pressable>
       </Animated.View>
 
       <View style={styles.decoration}>
@@ -126,6 +136,13 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.6)",
     marginTop: Spacing.xl,
     textAlign: "center",
+  },
+  techLoginBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
   },
   decoration: {
     position: "absolute",
